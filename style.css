@@ -211,6 +211,27 @@ h2.title { margin-top: 0; font-size: 26px; font-weight: 900; color: var(--accent
 
 .links { display: flex; justify-content: center; flex-wrap: wrap; }
 
+.task.me { background: var(--card-sel); outline: 3px solid var(--accent); }
+.task .pos { display: inline-block; min-width: 2.2em; }
+#rankScopes { margin-top: 8px; }
+
+.field { display: block; margin-top: 8px; text-align: left; font-size: 13px; font-weight: 800; }
+.field input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 3px solid var(--trim);
+  border-radius: 12px;
+  background: #fff;
+  color: #222;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 .help-row { display: flex; align-items: center; gap: 12px; text-align: left; font-weight: 800; font-size: 15px; }
 .help-row canvas { flex: none; width: 50px; height: 50px; }
 

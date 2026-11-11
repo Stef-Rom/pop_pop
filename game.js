@@ -98,13 +98,17 @@
     mute: false, theme: 'cinema', tuto: false,
     stats: { games: 0, pop: 0, candy: 0, sucette: 0, burnt: 0, combo: 0, level: 1 },
     ach: [], daily: null,
+    player: { id: '', name: '', grp: '' },      // profil du classement en ligne
+    dirty: { chrono: false, survie: false },    // records pas encore envoyés
   };
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (s && typeof s === 'object') {
       const stats = Object.assign({}, save.stats, s.stats);
       const best = Object.assign({}, save.best, s.best);
-      Object.assign(save, s, { stats, best });
+      const player = Object.assign({}, save.player, s.player);
+      const dirty = Object.assign({}, save.dirty, s.dirty);
+      Object.assign(save, s, { stats, best, player, dirty });
       if (!Array.isArray(save.unlocked)) save.unlocked = FREE.slice();
       if (!Array.isArray(save.buckets)) save.buckets = ['classique'];
       if (!Array.isArray(save.ach)) save.ach = [];
@@ -331,7 +335,7 @@
     s.combo = Math.max(s.combo, g.maxCombo);
     s.level = Math.max(s.level, g.level);
     if (counted) s.games++;
-    if (g.score > (save.best[mode] || 0)) { save.best[mode] = g.score; out.record = true; }
+    if (g.score > (save.best[mode] || 0)) { save.best[mode] = g.score; out.record = true; save.dirty[mode] = true; }
 
     ensureDaily();
     const res = {
@@ -368,6 +372,8 @@
     const extra = $('#overExtra');
     extra.textContent = '';
     const lines = ['Niveau ' + g.level + ' · combo max ' + g.maxCombo].concat(out ? out.lines : []);
+    if (!save.player.name) lines.push('Choisis un pseudo dans Classement pour comparer ton score');
+    trySync();
     for (const l of lines) {
       const p = document.createElement('p');
       p.textContent = l;
@@ -1014,7 +1020,7 @@
     setText('power', pw);
   }
 
-  const SCREENS = ['menu', 'vest', 'succes', 'help', 'pause', 'over'];
+  const SCREENS = ['menu', 'vest', 'succes', 'rank', 'help', 'pause', 'over'];
   function show(which) {
     for (const id of SCREENS) $('#' + id).classList.toggle('hidden', id !== which);
     $('#hud').classList.toggle('hidden', which !== 'hud' && which !== 'pause');
@@ -1229,6 +1235,132 @@
     buildMenu();
     show('menu');
     if (out && out.lines.length) toast(out.lines.join(' · '));
+    trySync();
+  }
+
+  // ---------- Classement en ligne ----------
+  const BAD = ['merde', 'putain', 'connard', 'connasse', 'salope', 'salaud', 'encule', 'enfoire', 'pute', 'couille', 'nique', 'batard', 'fuck', 'shit', 'bitch', 'asshole', 'nazi', 'hitler'];
+  const plain = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+  function nameError(n) {
+    if (n.length < 2 || n.length > 14) return 'Le pseudo doit faire entre 2 et 14 caractères.';
+    if (/[<>]/.test(n)) return 'Le pseudo contient un caractère interdit.';
+    const p = plain(n);
+    if (BAD.some((b) => p.includes(b))) return 'Choisis un autre pseudo.';
+    return '';
+  }
+  function newId() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 3) | 8).toString(16);
+    });
+  }
+
+  // Envoie les records en attente. Sans réseau, ils restent marqués et repartent plus tard.
+  let syncing = null;
+  function trySync() {
+    if (syncing) return syncing;
+    if (!save.player.name || !save.player.id || !window.Online) return Promise.resolve(false);
+    syncing = (async () => {
+      try {
+        for (const m of ['chrono', 'survie']) {
+          if (!save.dirty[m] || !(save.best[m] > 0)) continue;
+          await window.Online.submit(save.player, m, save.best[m]);
+          save.dirty[m] = false;
+          persist();
+        }
+        return true;
+      } catch (e) {
+        return false;
+      } finally {
+        syncing = null;
+      }
+    })();
+    return syncing;
+  }
+
+  let rankMode = 'chrono';
+  let rankScope = 'monde';
+  let rankToken = 0;
+
+  function chips(el, options, current, onPick) {
+    el.textContent = '';
+    for (const [id, label] of options) {
+      const b = document.createElement('button');
+      b.className = 'chip' + (id === current ? ' sel' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => onPick(id));
+      el.append(b);
+    }
+  }
+
+  async function loadRank() {
+    const token = ++rankToken;
+    if (!save.player.grp) rankScope = 'monde';
+    chips($('#rankModes'), [['chrono', 'Chrono'], ['survie', 'Survie']], rankMode, (id) => { rankMode = id; loadRank(); });
+    const scopes = [['monde', 'Monde']];
+    if (save.player.grp) scopes.push(['groupe', 'Groupe ' + save.player.grp]);
+    chips($('#rankScopes'), scopes, rankScope, (id) => { rankScope = id; loadRank(); });
+
+    const msg = $('#rankMsg');
+    const list = $('#rankList');
+    list.textContent = '';
+    msg.textContent = 'Chargement…';
+    try {
+      await trySync();
+      const rows = await window.Online.top(rankMode, rankScope === 'groupe' ? save.player.grp : null, save.player.id || null);
+      if (token !== rankToken) return;
+      if (!rows || !rows.length) {
+        msg.textContent = 'Aucun score pour le moment. À toi de jouer !';
+      } else if (!save.player.name) {
+        msg.textContent = 'Choisis un pseudo ci-dessous pour apparaître dans le classement.';
+      } else if (!rows.some((r) => r.me)) {
+        msg.textContent = 'Termine une partie pour entrer dans ce classement.';
+      } else {
+        msg.textContent = '';
+      }
+      for (const r of rows || []) {
+        const row = document.createElement('div');
+        row.className = 'task' + (r.me ? ' me' : '');
+        const who = document.createElement('span');
+        const pos = document.createElement('b');
+        pos.className = 'pos';
+        pos.textContent = r.pos <= 3 ? ['🥇', '🥈', '🥉'][r.pos - 1] : r.pos + '.';
+        who.append(pos, ' ' + r.name + (r.me ? ' (toi)' : ''));
+        const sc = document.createElement('b');
+        sc.textContent = r.score;
+        row.append(who, sc);
+        list.append(row);
+      }
+    } catch (e) {
+      if (token !== rankToken) return;
+      msg.textContent = 'Classement indisponible pour le moment. Vérifie ta connexion.';
+    }
+  }
+
+  function openRank() {
+    $('#inName').value = save.player.name;
+    $('#inGrp').value = save.player.grp;
+    show('rank');
+    loadRank();
+  }
+
+  function saveProfile() {
+    const name = $('#inName').value.trim().replace(/\s+/g, ' ');
+    const grp = $('#inGrp').value.trim().toUpperCase();
+    const err = nameError(name);
+    if (err) { toast(err); return; }
+    if (grp && !/^[A-Z0-9]{3,10}$/.test(grp)) { toast('Le code de groupe fait 3 à 10 lettres ou chiffres, sans espace.'); return; }
+    if (!save.player.id) save.player.id = newId();
+    save.player.name = name;
+    save.player.grp = grp;
+    save.dirty.chrono = save.best.chrono > 0;
+    save.dirty.survie = save.best.survie > 0;
+    persist();
+    $('#inGrp').value = grp;
+    toast('Profil enregistré');
+    tone(700, 0.08, 'triangle', 0.09);
+    loadRank();
   }
 
   function pause() {
@@ -1254,6 +1386,10 @@
   $('#btnVestBack').addEventListener('click', () => { buildMenu(); show('menu'); });
   $('#btnSucces').addEventListener('click', () => { buildSucces(); show('succes'); });
   $('#btnSuccesBack').addEventListener('click', () => { buildMenu(); show('menu'); });
+  $('#btnRank').addEventListener('click', openRank);
+  $('#btnRankBack').addEventListener('click', () => { rankToken++; buildMenu(); show('menu'); });
+  $('#btnProfile').addEventListener('click', saveProfile);
+  window.addEventListener('online', trySync);
   $('#btnHelp').addEventListener('click', openHelp);
   $('#btnHelpOk').addEventListener('click', () => { save.tuto = true; persist(); buildMenu(); show('menu'); });
   $('#btnSound').addEventListener('click', () => { save.mute = !save.mute; persist(); buildMenu(); tone(600, 0.06); });
@@ -1296,6 +1432,7 @@
   machine.x = player.x = player.tx = W / 2;
   buildMenu();
   if (save.tuto) show('menu'); else openHelp();
+  trySync();
   requestAnimationFrame(frame);
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

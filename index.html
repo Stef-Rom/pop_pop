@@ -51,6 +51,7 @@
       <div id="daily" class="list"></div>
 
       <div class="links">
+        <button id="btnRank" class="link">🏅 Classement</button>
         <button id="btnSucces" class="link">🏆 Succès</button>
         <button id="btnHelp" class="link">❓ Aide</button>
         <button id="btnSound" class="link"></button>
@@ -83,6 +84,27 @@
       <h2>Statistiques</h2>
       <div id="stats" class="list"></div>
       <button id="btnSuccesBack" class="btn">Retour</button>
+    </div>
+  </section>
+
+  <section id="rank" class="screen hidden">
+    <div class="panel">
+      <h2 class="title">Classement</h2>
+      <div id="rankModes" class="styles"></div>
+      <div id="rankScopes" class="styles"></div>
+      <p id="rankMsg" class="legend"></p>
+      <div id="rankList" class="list"></div>
+
+      <h2>Mon profil</h2>
+      <label class="field">Pseudo
+        <input id="inName" type="text" maxlength="14" autocomplete="off" autocapitalize="words" spellcheck="false">
+      </label>
+      <label class="field">Code de groupe (facultatif)
+        <input id="inGrp" type="text" maxlength="10" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      </label>
+      <p class="legend">Ne mets pas ton vrai nom. Pour un classement entre amis, choisissez ensemble un code et saisissez tous le même.</p>
+      <button id="btnProfile" class="btn alt">Enregistrer</button>
+      <button id="btnRankBack" class="btn">Retour</button>
     </div>
   </section>
 
@@ -120,6 +142,7 @@
   <div id="toast" class="hidden"></div>
 </div>
 <script src="art.js"></script>
+<script src="online.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
