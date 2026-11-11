@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#5a0d18">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pop Pop">
+<title>Pop Pop</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div class="hud-l">
+      <span id="score">0</span>
+      <span id="combo"></span>
+    </div>
+    <div class="hud-r">
+      <span id="power"></span>
+      <span id="status"></span>
+      <button id="btnPause" class="round" aria-label="Pause">⏸</button>
+    </div>
+  </div>
+
+  <section id="menu" class="screen">
+    <div class="panel">
+      <h1>POP POP</h1>
+      <p id="wallet" class="wallet"></p>
+
+      <h2>Choisis ton avatar</h2>
+      <div id="avGrid" class="grid"></div>
+
+      <div class="modes">
+        <button id="btnChrono" class="btn">Chrono<small>60 secondes</small></button>
+        <button id="btnSurvie" class="btn alt">Survie<small>3 vies</small></button>
+      </div>
+      <p id="best" class="best"></p>
+      <p class="legend">🍿 +1 · caramel +3 · 🍬 +5 · 🍭 +10<br>Évite les grains brûlés !</p>
+      <button id="btnSound" class="link"></button>
+    </div>
+  </section>
+
+  <section id="pause" class="screen hidden">
+    <div class="panel small">
+      <h2>Pause</h2>
+      <button id="btnResume" class="btn">Reprendre</button>
+      <button id="btnQuit" class="btn alt">Quitter</button>
+    </div>
+  </section>
+
+  <section id="over" class="screen hidden">
+    <div class="panel small">
+      <h2 id="overTitle"></h2>
+      <p id="overScore" class="big"></p>
+      <p id="overRecord" class="record"></p>
+      <p id="overLoot" class="wallet"></p>
+      <button id="btnAgain" class="btn">Rejouer</button>
+      <button id="btnMenu" class="btn alt">Menu</button>
+    </div>
+  </section>
+
+  <div id="toast" class="hidden"></div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>

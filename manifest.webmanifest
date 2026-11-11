@@ -1,0 +1,16 @@
+{
+  "name": "Pop Pop",
+  "short_name": "Pop Pop",
+  "description": "Attrape un maximum de pop-corn et de bonbons !",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#1a0508",
+  "theme_color": "#5a0d18",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
