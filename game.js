@@ -113,6 +113,8 @@
       if (!Array.isArray(save.buckets)) save.buckets = ['classique'];
       if (!Array.isArray(save.ach)) save.ach = [];
       if (!save.unlocked.includes(save.avatar)) save.avatar = 'leo';
+      // Les anciens pseudos saisis librement ne sont plus acceptés : il faudra en tirer un nouveau.
+      if (save.player.name && !/^\S+ \S+ [1-9][0-9]$/.test(save.player.name)) save.player.name = '';
       if (!save.buckets.includes(save.bucket)) save.bucket = 'classique';
       if (!THEMES[save.theme]) save.theme = 'cinema';
     }
@@ -1239,15 +1241,14 @@
   }
 
   // ---------- Classement en ligne ----------
-  const BAD = ['merde', 'putain', 'connard', 'connasse', 'salope', 'salaud', 'encule', 'enfoire', 'pute', 'couille', 'nique', 'batard', 'fuck', 'shit', 'bitch', 'asshole', 'nazi', 'hitler'];
-  const plain = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
-  function nameError(n) {
-    if (n.length < 2 || n.length > 14) return 'Le pseudo doit faire entre 2 et 14 caractères.';
-    if (/[<>]/.test(n)) return 'Le pseudo contient un caractère interdit.';
-    const p = plain(n);
-    if (BAD.some((b) => p.includes(b))) return 'Choisis un autre pseudo.';
-    return '';
-  }
+  // Le pseudo est composé de mots imposés (aucun texte libre) : le jeu est tous publics,
+  // et un enfant ne peut donc pas y saisir son vrai nom. Mêmes listes dans supabase/classement.sql.
+  const NAME_A = ["Panda", "Renard", "Tigre", "Lapin", "Hibou", "Koala", "Dragon", "Robot", "Pirate", "Ninja", "Castor", "Dauphin", "Lion", "Loup", "Ours", "Zèbre", "Pingouin", "Hérisson", "Chaton", "Poussin"];
+  const NAME_B = ["Malin", "Rapide", "Joyeux", "Gourmand", "Rigolo", "Géant", "Doré", "Futé", "Brave", "Agile", "Curieux", "Farceur", "Magique", "Costaud", "Rusé", "Super", "Turbo", "Cosmique", "Sucré", "Croustillant"];
+  const NAME_RE = new RegExp("^(" + NAME_A.join("|") + ") (" + NAME_B.join("|") + ") [1-9][0-9]$");
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const randomName = () => pick(NAME_A) + " " + pick(NAME_B) + " " + (10 + Math.floor(Math.random() * 90));
+  let pendingName = "";
   function newId() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -1313,7 +1314,7 @@
       if (!rows || !rows.length) {
         msg.textContent = 'Aucun score pour le moment. À toi de jouer !';
       } else if (!save.player.name) {
-        msg.textContent = 'Choisis un pseudo ci-dessous pour apparaître dans le classement.';
+        msg.textContent = 'Enregistre ton pseudo ci-dessous pour apparaître dans le classement.';
       } else if (!rows.some((r) => r.me)) {
         msg.textContent = 'Termine une partie pour entrer dans ce classement.';
       } else {
@@ -1339,17 +1340,16 @@
   }
 
   function openRank() {
-    $('#inName').value = save.player.name;
+    pendingName = save.player.name || randomName();
+    $('#nameView').textContent = pendingName;
     $('#inGrp').value = save.player.grp;
     show('rank');
     loadRank();
   }
 
   function saveProfile() {
-    const name = $('#inName').value.trim().replace(/\s+/g, ' ');
+    const name = NAME_RE.test(pendingName) ? pendingName : randomName();
     const grp = $('#inGrp').value.trim().toUpperCase();
-    const err = nameError(name);
-    if (err) { toast(err); return; }
     if (grp && !/^[A-Z0-9]{3,10}$/.test(grp)) { toast('Le code de groupe fait 3 à 10 lettres ou chiffres, sans espace.'); return; }
     if (!save.player.id) save.player.id = newId();
     save.player.name = name;
@@ -1389,6 +1389,11 @@
   $('#btnRank').addEventListener('click', openRank);
   $('#btnRankBack').addEventListener('click', () => { rankToken++; buildMenu(); show('menu'); });
   $('#btnProfile').addEventListener('click', saveProfile);
+  $('#btnDice').addEventListener('click', () => {
+    pendingName = randomName();
+    $('#nameView').textContent = pendingName;
+    tone(500 + Math.random() * 300, 0.05, 'triangle', 0.08);
+  });
   window.addEventListener('online', trySync);
   $('#btnHelp').addEventListener('click', openHelp);
   $('#btnHelpOk').addEventListener('click', () => { save.tuto = true; persist(); buildMenu(); show('menu'); });

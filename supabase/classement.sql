@@ -43,7 +43,10 @@ begin
   if p_mode is null or p_mode not in ('chrono', 'survie') then
     raise exception 'mode invalide';
   end if;
-  if char_length(v_name) < 2 or char_length(v_name) > 14 or v_name ~ '[<>[:cntrl:]]' then
+  -- Le pseudo est composé de mots imposés (mêmes listes que dans game.js) : aucun texte libre.
+  if v_name !~ ('^(Panda|Renard|Tigre|Lapin|Hibou|Koala|Dragon|Robot|Pirate|Ninja|Castor|Dauphin|Lion|Loup|Ours|Zèbre|Pingouin|Hérisson|Chaton|Poussin)'
+             || ' (Malin|Rapide|Joyeux|Gourmand|Rigolo|Géant|Doré|Futé|Brave|Agile|Curieux|Farceur|Magique|Costaud|Rusé|Super|Turbo|Cosmique|Sucré|Croustillant)'
+             || ' [1-9][0-9]$') then
     raise exception 'pseudo invalide';
   end if;
   if p_score is null or p_score < 0
@@ -94,6 +97,10 @@ revoke all on function public.submit_score(uuid, text, text, integer, text) from
 revoke all on function public.get_leaderboard(text, text, uuid) from public;
 grant execute on function public.submit_score(uuid, text, text, integer, text) to anon, authenticated;
 grant execute on function public.get_leaderboard(text, text, uuid) to anon, authenticated;
+
+-- Facultatif : supprime les scores enregistrés avec un ancien pseudo saisi librement
+-- (dont la ligne de test « TestRobot »). Retire les deux tirets pour l'activer.
+-- delete from public.scores where name !~ '^\S+ \S+ [1-9][0-9]$';
 
 -- Demande à l'API de prendre en compte les nouvelles fonctions tout de suite.
 notify pgrst, 'reload schema';

@@ -96,13 +96,17 @@
       <div id="rankList" class="list"></div>
 
       <h2>Mon profil</h2>
-      <label class="field">Pseudo
-        <input id="inName" type="text" maxlength="14" autocomplete="off" autocapitalize="words" spellcheck="false">
-      </label>
+      <div class="field">Pseudo
+        <div class="namebox">
+          <span id="nameView"></span>
+          <button id="btnDice" type="button" aria-label="Tirer un autre pseudo">🎲</button>
+        </div>
+      </div>
       <label class="field">Code de groupe (facultatif)
         <input id="inGrp" type="text" maxlength="10" autocomplete="off" autocapitalize="characters" spellcheck="false">
       </label>
-      <p class="legend">Ne mets pas ton vrai nom. Pour un classement entre amis, choisissez ensemble un code et saisissez tous le même.</p>
+      <p class="legend">Touche le dé pour tirer un autre pseudo. Pour un classement entre amis, choisissez ensemble un code et saisissez tous le même.
+        <a href="confidentialite.html" target="_blank" rel="noopener">Confidentialité</a></p>
       <button id="btnProfile" class="btn alt">Enregistrer</button>
       <button id="btnRankBack" class="btn">Retour</button>
     </div>

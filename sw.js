@@ -1,7 +1,7 @@
 // Mode hors ligne : réseau d'abord, cache en secours.
-const CACHE = 'poppop-v3';
+const CACHE = 'poppop-v4';
 const ASSETS = [
-  './', 'index.html', 'style.css', 'art.js', 'online.js', 'game.js', 'manifest.webmanifest',
+  './', 'index.html', 'confidentialite.html', 'style.css', 'art.js', 'online.js', 'game.js', 'manifest.webmanifest',
   'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 
