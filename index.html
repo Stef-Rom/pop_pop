@@ -20,12 +20,18 @@
 
   <div id="hud" class="hidden">
     <div class="hud-l">
-      <span id="score">0</span>
-      <span id="combo"></span>
-      <span id="level"></span>
+      <div class="hud-row">
+        <span id="score">0</span>
+        <span id="combo"></span>
+        <span id="level"></span>
+      </div>
+      <div id="comboWrap" class="bar" aria-hidden="true"><i id="comboBar"></i></div>
     </div>
     <div class="hud-r">
-      <span id="power"></span>
+      <div class="hud-col">
+        <span id="power"></span>
+        <div id="powerWrap" class="bar blue hidden" aria-hidden="true"><i id="powerBar"></i></div>
+      </div>
       <span id="status"></span>
       <button id="btnPause" class="round" aria-label="Pause">⏸</button>
     </div>
@@ -36,10 +42,15 @@
       <h1>POP POP</h1>
       <p id="wallet" class="wallet"></p>
 
-      <button id="btnLook" class="look">
-        <canvas id="preview" width="220" height="210"></canvas>
-        <span>Vestiaire : avatar, seau et style</span>
-      </button>
+      <div class="lookrow">
+        <button id="btnPrev" class="arrow" aria-label="Avatar précédent">◀</button>
+        <button id="btnLook" class="look">
+          <canvas id="preview" width="220" height="210"></canvas>
+          <b id="avName"></b>
+          <span>Vestiaire : avatars, seaux et styles</span>
+        </button>
+        <button id="btnNext" class="arrow" aria-label="Avatar suivant">▶</button>
+      </div>
 
       <div class="modes">
         <button id="btnChrono" class="btn">Chrono<small>60 secondes</small></button>
@@ -54,7 +65,8 @@
         <button id="btnRank" class="link">🏅 Classement</button>
         <button id="btnSucces" class="link">🏆 Succès</button>
         <button id="btnHelp" class="link">❓ Aide</button>
-        <button id="btnSound" class="link"></button>
+        <button id="btnMusic" class="link"></button>
+        <button id="btnSfx" class="link"></button>
       </div>
     </div>
   </section>
@@ -115,11 +127,12 @@
   <section id="help" class="screen hidden">
     <div class="panel">
       <h2 class="title">Comment jouer</h2>
-      <p class="lead">Glisse ton doigt pour déplacer le seau et attrape tout ce qui sort de la machine.</p>
+      <p class="lead">Glisse ton doigt n'importe où sur l'écran pour déplacer le seau, et attrape tout ce qui sort de la machine.</p>
       <div id="helpList"></div>
       <p class="legend">Enchaîne les prises sans rien rater : ton score est multiplié jusqu'à x5.<br>
-        En Survie, un grain brûlé ou 5 ratés d'affilée coûtent une vie.</p>
+        En Survie, un grain brûlé ou 3 ratés d'affilée coûtent une vie.</p>
       <button id="btnHelpOk" class="btn">J'ai compris !</button>
+      <button id="btnTuto" class="btn alt">Faire le tutoriel</button>
     </div>
   </section>
 
@@ -142,6 +155,11 @@
       <button id="btnMenu" class="btn alt">Menu</button>
     </div>
   </section>
+
+  <div id="update" class="hidden">
+    <span>Nouvelle version disponible</span>
+    <button id="btnUpdate">Mettre à jour</button>
+  </div>
 
   <div id="toast" class="hidden"></div>
 </div>

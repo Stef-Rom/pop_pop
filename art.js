@@ -154,16 +154,28 @@
         if (o.face) face(c);
         break;
       }
-      case 'brule':
-        c.fillStyle = 'rgba(255,90,30,.28)';
-        circ(c, 0, -1, 17);
+      case 'brule': {
+        // Halo hérissé + croix : reconnaissable par la forme, pas seulement par la couleur
+        c.fillStyle = 'rgba(255,70,20,.62)';
+        c.beginPath();
+        for (let i = 0; i < 20; i++) {
+          const a = i * TAU / 20;
+          const r = i % 2 ? 14.5 : 21;
+          c.lineTo(Math.cos(a) * r, Math.sin(a) * r - 1);
+        }
+        c.closePath(); c.fill();
         kernel(c, '#4c3a32', '#231916', null, 'rgba(255,170,100,.45)');
         if (o.face) face(c, true, '#ffb37a');
         else {
-          c.fillStyle = '#ff8a3d';
-          circ(c, -5, 0, 1.7); circ(c, 4, -5, 1.5); circ(c, 3, 4.5, 1.4); circ(c, -1, -8, 1.1);
+          c.lineCap = 'round';
+          for (const pass of [1, 0]) {
+            c.strokeStyle = pass ? '#1a0c08' : '#ff6a2a';
+            c.lineWidth = pass ? 5.6 : 3.2;
+            c.beginPath(); c.moveTo(-5.5, -6.5); c.lineTo(5.5, 4.5); c.moveTo(5.5, -6.5); c.lineTo(-5.5, 4.5); c.stroke();
+          }
         }
         break;
+      }
       case 'bonbon': {
         const p = CANDY[Math.floor(seed) % CANDY.length];
         candy(c, p[0], p[1], o.face);
@@ -310,6 +322,109 @@
         head('#ffffff');
         eyes(-1, '#4a2a6b'); cheeks(); mouth(5, '#4a2a6b');
         break;
+      case 'cochon':
+        for (const sx of [-1, 1]) {
+          c.fillStyle = OUT;
+          c.beginPath(); c.moveTo(sx * 6, -19); c.quadraticCurveTo(sx * 24, -40, sx * 26, -11); c.closePath(); c.fill();
+          c.fillStyle = '#f08fae';
+          c.beginPath(); c.moveTo(sx * 8, -19); c.quadraticCurveTo(sx * 23, -36, sx * 24, -13); c.closePath(); c.fill();
+        }
+        head('#f9b8cc');
+        eyes(-5); cheeks(); mouth(11);
+        c.fillStyle = OUT; oval(c, 0, 6, 11.3, 8.3);
+        c.fillStyle = '#f08fae'; oval(c, 0, 6, 10, 7);
+        c.fillStyle = '#b8506e'; oval(c, -3.6, 6, 1.7, 2.6); oval(c, 3.6, 6, 1.7, 2.6);
+        break;
+      case 'canard':
+        c.strokeStyle = OUT; c.lineWidth = 5;
+        c.beginPath(); c.moveTo(-3, -23); c.quadraticCurveTo(-8, -34, 1, -33); c.moveTo(2, -23); c.quadraticCurveTo(4, -36, 11, -30); c.stroke();
+        c.strokeStyle = '#ffffff'; c.lineWidth = 3;
+        c.beginPath(); c.moveTo(-3, -23); c.quadraticCurveTo(-8, -34, 1, -33); c.moveTo(2, -23); c.quadraticCurveTo(4, -36, 11, -30); c.stroke();
+        head('#ffffff');
+        eyes(-5); cheeks();
+        c.fillStyle = OUT; oval(c, 0, 8, 13.3, 7.8);
+        c.fillStyle = '#ff9a1f'; oval(c, 0, 8, 12, 6.5);
+        c.fillStyle = '#ffb84d'; oval(c, 0, 5.6, 9, 2.6);
+        c.strokeStyle = '#c96a0a'; c.lineWidth = 1.4;
+        c.beginPath();
+        if (sad) c.arc(0, 15, 9, Math.PI * 1.25, Math.PI * 1.75); else c.arc(0, 3, 9, Math.PI * 0.25, Math.PI * 0.75);
+        c.stroke();
+        break;
+      case 'poussin':
+        head('#ffd93b');
+        // Demi-coquille d'œuf en guise de chapeau
+        c.fillStyle = OUT; c.beginPath(); c.arc(0, 0, 25.3, Math.PI * 1.13, Math.PI * 1.87); c.closePath(); c.fill();
+        topCap('#fffdf5');
+        c.fillStyle = '#fffdf5';
+        for (let i = 0; i < 5; i++) {
+          const zx = -22 + i * 8.9;
+          c.beginPath(); c.moveTo(zx, -10.2); c.lineTo(zx + 8.9, -10.2); c.lineTo(zx + 4.45, -4.6); c.closePath(); c.fill();
+        }
+        eyes(1, null, 9);
+        c.fillStyle = 'rgba(255,140,60,.45)'; circ(c, -15, 9, 4); circ(c, 15, 9, 4);
+        c.fillStyle = OUT; c.beginPath(); c.moveTo(-6.5, 4.5); c.lineTo(6.5, 4.5); c.lineTo(0, 14); c.closePath(); c.fill();
+        c.fillStyle = '#ff8a1f'; c.beginPath(); c.moveTo(-4.6, 5.6); c.lineTo(4.6, 5.6); c.lineTo(0, 12); c.closePath(); c.fill();
+        break;
+      case 'bebe':
+        head('#f6cfae');
+        c.strokeStyle = '#8a5a2b'; c.lineWidth = 2.4;
+        c.beginPath(); c.moveTo(0, -23); c.bezierCurveTo(-9, -33, 6, -38, 5, -29); c.bezierCurveTo(4.5, -25, 0, -27, 1.5, -30); c.stroke();
+        eyes(-3, null, 9); cheeks();
+        if (sad) mouth(6);
+        else {
+          // Tétine
+          c.fillStyle = OUT; circ(c, 0, 10, 8.3);
+          c.fillStyle = '#6fc8ff'; circ(c, 0, 10, 7);
+          c.fillStyle = '#ffffff'; circ(c, 0, 10, 3.4);
+          c.strokeStyle = '#3f9be0'; c.lineWidth = 2;
+          c.beginPath(); c.arc(0, 17.5, 3.6, 0, Math.PI); c.stroke();
+        }
+        break;
+      case 'chatnoir':
+        ear(-1, '#2b2b33', '#ff8fb0'); ear(1, '#2b2b33', '#ff8fb0');
+        head('#2b2b33');
+        if (happy) eyes(-3, '#f4e04d');
+        else {
+          c.fillStyle = '#f4e04d'; oval(c, -8, -3, 4.4, 4); oval(c, 8, -3, 4.4, 4);
+          c.fillStyle = '#17171c'; oval(c, -8, -3, 1.3, 3.3); oval(c, 8, -3, 1.3, 3.3);
+        }
+        c.fillStyle = '#ff8fb0'; c.beginPath(); c.moveTo(-3, 4); c.lineTo(3, 4); c.lineTo(0, 8); c.closePath(); c.fill();
+        c.strokeStyle = '#d8d8e0'; c.lineWidth = 1;
+        c.beginPath(); c.moveTo(-10, 8); c.lineTo(-25, 5); c.moveTo(-10, 11); c.lineTo(-25, 13); c.moveTo(10, 8); c.lineTo(25, 5); c.moveTo(10, 11); c.lineTo(25, 13); c.stroke();
+        mouth(6, '#d8d8e0');
+        break;
+      case 'heros':
+        // Capitaine Pop : héros original, masque vert et mèche brune
+        head('#f2c49b');
+        topCap('#5a3418');
+        c.fillStyle = '#5a3418'; c.beginPath(); c.moveTo(-6, -11); c.quadraticCurveTo(4, -4, 14, -11); c.closePath(); c.fill();
+        c.save();
+        c.beginPath(); c.arc(0, 0, 24, 0, TAU); c.clip();
+        c.fillStyle = '#1f8f5f'; rr(c, -26, -8, 52, 12, 5); c.fill();
+        c.restore();
+        c.fillStyle = '#ffffff'; oval(c, -8, -2, 4.2, 3.2); oval(c, 8, -2, 4.2, 3.2);
+        if (!happy) { c.fillStyle = dark; circ(c, -7.4, -2, 1.7); circ(c, 8.6, -2, 1.7); }
+        else { c.strokeStyle = dark; c.lineWidth = 1.8; c.beginPath(); c.arc(-8, -1, 2.6, Math.PI * 1.15, Math.PI * 1.85); c.moveTo(5.6, -2); c.arc(8, -1, 2.6, Math.PI * 1.15, Math.PI * 1.85); c.stroke(); }
+        cheeks(); mouth(6);
+        break;
+      case 'masque':
+        // Éclair : héros original, cagoule violette et éclair sur le front
+        head('#f2c49b');
+        c.save();
+        c.beginPath(); c.arc(0, 0, 24, 0, TAU); c.clip();
+        c.fillStyle = '#4a34b0';
+        c.beginPath(); c.moveTo(-26, -26); c.lineTo(26, -26); c.lineTo(26, 3); c.quadraticCurveTo(0, 12, -26, 3); c.closePath(); c.fill();
+        c.fillStyle = 'rgba(255,255,255,.16)'; oval(c, -9, -14, 8, 4, -0.5);
+        c.restore();
+        c.fillStyle = '#ffffff';
+        for (const sx of [-1, 1]) {
+          c.beginPath(); c.moveTo(sx * 3, -1); c.quadraticCurveTo(sx * 9, -9, sx * 15, -5); c.quadraticCurveTo(sx * 11, 3, sx * 3, -1); c.fill();
+        }
+        if (sad) { c.fillStyle = dark; circ(c, -8.5, -2.4, 1.4); circ(c, 8.5, -2.4, 1.4); }
+        c.fillStyle = '#ffe14d';
+        c.beginPath(); c.moveTo(2.5, -22); c.lineTo(-4, -13.5); c.lineTo(-0.5, -13.5); c.lineTo(-2.5, -7); c.lineTo(4.5, -16); c.lineTo(1, -16); c.closePath(); c.fill();
+        mouth(9);
+        break;
       case 'fantome':
         for (const pass of [1, 0]) {
           const o = pass ? 1.3 : 0;
@@ -387,6 +502,35 @@
       case 'arc':
         for (let i = 0; i < 6; i++) { c.fillStyle = RAINBOW[i]; band(i / 6, (i + 1) / 6); }
         break;
+      case 'fleurs': {
+        c.fillStyle = '#3f8fe8'; c.fillRect(-bw, 0, 2 * bw, h);
+        c.fillStyle = '#5aa6f5'; band(0.3, 0.42); band(0.62, 0.7);
+        const nf = bw > 40 ? 7 : 5;
+        for (let i = 0; i < nf; i++) {
+          const fx = -bw + 9 + i * (2 * bw - 18) / (nf - 1);
+          const fy = i % 2 ? 27 : 11;
+          c.fillStyle = '#ff9fd0';
+          for (let k = 0; k < 5; k++) circ(c, fx + Math.cos(k * TAU / 5 - 1.57) * 4.2, fy + Math.sin(k * TAU / 5 - 1.57) * 4.2, 3.2);
+          c.fillStyle = '#ffe14d'; circ(c, fx, fy, 2.5);
+        }
+        break;
+      }
+      case 'eclair': {
+        const gr = c.createLinearGradient(0, 0, 0, h);
+        gr.addColorStop(0, '#15132a'); gr.addColorStop(1, '#43307c');
+        c.fillStyle = gr; c.fillRect(-bw, 0, 2 * bw, h);
+        const nb = bw > 40 ? 4 : 3;
+        c.fillStyle = '#ffe14d';
+        for (let i = 0; i < nb; i++) {
+          const x = -bw + 13 + i * (2 * bw - 26) / (nb - 1);
+          const y = 19 + (i % 2 ? 2 : -1);
+          c.beginPath();
+          c.moveTo(x + 3.5, y - 13); c.lineTo(x - 5.5, y + 1.5); c.lineTo(x - 0.5, y + 1.5);
+          c.lineTo(x - 3.5, y + 13); c.lineTo(x + 6, y - 3); c.lineTo(x + 1, y - 3);
+          c.closePath(); c.fill();
+        }
+        break;
+      }
       default:
         c.fillStyle = th.bucket; c.fillRect(-bw, 0, 2 * bw, h);
         c.fillStyle = th.stripe;

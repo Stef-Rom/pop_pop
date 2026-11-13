@@ -24,6 +24,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      # Le jeu compare ce fichier à celui chargé au démarrage pour proposer une mise à jour.
+      - run: echo "${GITHUB_SHA}" > version.txt
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

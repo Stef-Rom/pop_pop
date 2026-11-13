@@ -174,6 +174,70 @@ p { margin: 6px 0; }
 }
 
 #level { font-size: 14px; opacity: .9; }
+
+/* Jauges du HUD : progression vers le prochain multiplicateur, durée du bonus */
+#hud { align-items: flex-start; }
+.hud-l { flex-direction: column; align-items: flex-start; gap: 3px; }
+.hud-row { display: flex; align-items: center; gap: 10px; }
+.hud-col { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.bar {
+  width: 120px;
+  height: 10px;
+  border: 2px solid rgba(255, 255, 255, .7);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, .4);
+  overflow: hidden;
+}
+.bar i { display: block; height: 100%; width: 0; background: var(--combo); transition: width .12s linear; }
+.bar.max i { background: linear-gradient(90deg, #ffd257, #ff6a3d); }
+.bar.blue { width: 90px; }
+.bar.blue i { background: #7fe0ff; transition: none; }
+
+/* Choix rapide de l'avatar dans le menu */
+.lookrow { display: flex; align-items: stretch; gap: 6px; margin-top: 8px; }
+.lookrow .look { flex: 1; margin-top: 0; }
+.look b { display: block; font-size: 16px; font-weight: 900; }
+.arrow {
+  flex: none;
+  width: 44px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--alt);
+  box-shadow: 0 4px 0 var(--alt-dark);
+  color: var(--ink);
+  font-size: 18px;
+}
+.arrow:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--alt-dark); }
+
+/* Avis de mise à jour */
+#update {
+  position: absolute;
+  top: max(8px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 94%;
+  padding: 8px 10px 8px 14px;
+  border-radius: 14px;
+  background: #2b070c;
+  color: #fff4d6;
+  font-size: 14px;
+  font-weight: 700;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, .3);
+}
+#update.ingame { display: none; }
+#update button {
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: #ffd257;
+  color: #2b070c;
+  font: inherit;
+  font-weight: 900;
+}
 h2.title { margin-top: 0; font-size: 26px; font-weight: 900; color: var(--accent); }
 .lead { font-weight: 700; font-size: 15px; }
 

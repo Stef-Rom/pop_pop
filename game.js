@@ -11,8 +11,10 @@
   const MY = 54;            // haut de la machine
   const MS = 1.25;          // échelle de la machine
   const PS = 1.3;           // échelle du joueur
-  const MISS_MAX = 5;       // ratés d'affilée avant de perdre une vie (Survie)
-  const LEVEL_PTS = 150;    // points pour passer au niveau suivant
+  const MISS_MAX = 3;       // ratés d'affilée avant de perdre une vie (Survie)
+  const LEVEL_PTS = 200;    // points pour passer au niveau suivant
+  const COMBO_STEP = 12;    // prises d'affilée pour gagner un cran de multiplicateur
+  const RULES = 2;          // version des règles : un changement remet les records à zéro
   let W = 400;              // taille logique, recalculée selon l'écran
   let H = 700;
   let scale = 1;
@@ -21,11 +23,19 @@
     { id: 'leo', name: 'Léo', shirt: '#3a7bd5', skin: '#f2c49b' },
     { id: 'mia', name: 'Mia', shirt: '#9b59d0', skin: '#f2c49b' },
     { id: 'chat', name: 'Moustache', shirt: '#f39c3d', skin: '#f39c3d' },
+    { id: 'cochon', name: 'Groin', shirt: '#f08fae', skin: '#f9b8cc', pop: 150, candy: 0 },
+    { id: 'canard', name: 'Coin-Coin', shirt: '#ff9a1f', skin: '#ffffff', pop: 200, candy: 0 },
+    { id: 'poussin', name: 'Piou', shirt: '#ffd93b', skin: '#ffd93b', pop: 200, candy: 10 },
+    { id: 'bebe', name: 'Bébé', shirt: '#bfe6ff', skin: '#f6cfae', pop: 300, candy: 20 },
+    { id: 'chatnoir', name: 'Minuit', shirt: '#2b2b33', skin: '#2b2b33', pop: 400, candy: 30 },
     { id: 'robot', name: 'Bip', shirt: '#8d99a3', skin: '#b8c4cc', pop: 100, candy: 0 },
     { id: 'renard', name: 'Roux', shirt: '#e8632b', skin: '#e8632b', pop: 250, candy: 20 },
     { id: 'panda', name: 'Bambou', shirt: '#2b2b33', skin: '#ffffff', pop: 350, candy: 40 },
     { id: 'fantome', name: 'Bouh', shirt: null, skin: '#ffffff', pop: 500, candy: 50 },
     { id: 'licorne', name: 'Étoile', shirt: '#ff8fc7', skin: '#ffffff', pop: 600, candy: 80 },
+    // Deux super-héros originaux (pas de personnages sous licence)
+    { id: 'heros', name: 'Capitaine Pop', shirt: '#1f8f5f', skin: '#f2c49b', cape: '#ffcc00', pop: 700, candy: 60 },
+    { id: 'masque', name: 'Éclair', shirt: '#4a34b0', skin: '#4a34b0', cape: '#ffe14d', pop: 800, candy: 80 },
   ];
   const FREE = ['leo', 'mia', 'chat'];
 
@@ -33,7 +43,9 @@
     { id: 'classique', name: 'Classique' },
     { id: 'dore', name: 'Doré', pop: 150, candy: 0 },
     { id: 'bonbon', name: 'Bonbon', pop: 0, candy: 40 },
+    { id: 'fleurs', name: 'Fleuri', pop: 200, candy: 20 },
     { id: 'etoile', name: 'Étoilé', pop: 300, candy: 30 },
+    { id: 'eclair', name: 'Orage', pop: 400, candy: 40 },
     { id: 'arc', name: 'Arc-en-ciel', pop: 0, candy: 120 },
   ];
 
@@ -76,26 +88,27 @@
 
   // ---------- Défis du jour et succès ----------
   const CHALLENGES = [
-    { id: 'pop', text: (n) => 'Attrape ' + n + ' pop-corn', goals: [150, 250, 400], reward: 10, cum: true },
-    { id: 'candy', text: (n) => 'Attrape ' + n + ' bonbons', goals: [25, 40], reward: 12, cum: true },
-    { id: 'sucette', text: (n) => 'Attrape ' + n + ' sucettes', goals: [6, 10], reward: 15, cum: true },
+    { id: 'pop', text: (n) => 'Attrape ' + n + ' pop-corn', goals: [200, 300, 450], reward: 10, cum: true },
+    { id: 'candy', text: (n) => 'Attrape ' + n + ' bonbons', goals: [30, 50], reward: 12, cum: true },
+    { id: 'sucette', text: (n) => 'Attrape ' + n + ' sucettes', goals: [8, 12], reward: 15, cum: true },
     { id: 'games', text: (n) => 'Joue ' + n + ' parties', goals: [3, 5], reward: 8, cum: true },
-    { id: 'combo', text: (n) => 'Fais un combo de ' + n, goals: [30, 45], reward: 15 },
+    { id: 'combo', text: (n) => 'Fais un combo de ' + n, goals: [35, 50], reward: 15 },
     { id: 'score', text: (n) => 'Marque ' + n + ' points en une partie', goals: [250, 400], reward: 15 },
-    { id: 'survie', text: (n) => 'Tiens ' + n + ' s en Survie', goals: [45, 75], reward: 15 },
+    { id: 'survie', text: (n) => 'Tiens ' + n + ' s en Survie', goals: [50, 80], reward: 15 },
     { id: 'clean', text: () => 'Finis un Chrono sans grain brûlé', goals: [1], reward: 15 },
   ];
   const CH = Object.fromEntries(CHALLENGES.map((c) => [c.id, c]));
   const ACH_REWARD = 10;
 
   // ---------- Sauvegarde ----------
+  let rulesNotice = false;
   const SAVE_KEY = 'poppop-save-v1';
   const save = {
     pop: 0, candy: 0,
     unlocked: FREE.slice(), avatar: 'leo',
     buckets: ['classique'], bucket: 'classique',
     best: { chrono: 0, survie: 0 },
-    mute: false, theme: 'cinema', tuto: false,
+    sfx: true, music: true, theme: 'cinema', tuto: false, rules: RULES,
     stats: { games: 0, pop: 0, candy: 0, sucette: 0, burnt: 0, combo: 0, level: 1 },
     ach: [], daily: null,
     player: { id: '', name: '', grp: '' },      // profil du classement en ligne
@@ -109,6 +122,9 @@
       const player = Object.assign({}, save.player, s.player);
       const dirty = Object.assign({}, save.dirty, s.dirty);
       Object.assign(save, s, { stats, best, player, dirty });
+      // Ancien réglage unique "son coupé" : il coupait tout.
+      if (s.mute === true && s.sfx === undefined) { save.sfx = false; save.music = false; }
+      delete save.mute;
       if (!Array.isArray(save.unlocked)) save.unlocked = FREE.slice();
       if (!Array.isArray(save.buckets)) save.buckets = ['classique'];
       if (!Array.isArray(save.ach)) save.ach = [];
@@ -117,6 +133,13 @@
       if (save.player.name && !/^\S+ \S+ [1-9][0-9]$/.test(save.player.name)) save.player.name = '';
       if (!save.buckets.includes(save.bucket)) save.bucket = 'classique';
       if (!THEMES[save.theme]) save.theme = 'cinema';
+      // Les règles ont changé : les anciens records ne sont plus comparables, ils repartent de zéro.
+      if (s.rules !== RULES) {
+        rulesNotice = save.best.chrono > 0 || save.best.survie > 0;
+        save.best = { chrono: 0, survie: 0 };
+        save.dirty = { chrono: false, survie: false };
+        save.rules = RULES;
+      }
     }
   } catch (e) { /* stockage indisponible : on joue sans sauvegarde */ }
   const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) {} };
@@ -126,10 +149,10 @@
     { id: 'pop500', name: 'Gourmand', desc: 'Attrape 500 pop-corn au total', test: () => save.stats.pop >= 500 },
     { id: 'pop2000', name: 'Ogre du pop-corn', desc: 'Attrape 2000 pop-corn au total', test: () => save.stats.pop >= 2000 },
     { id: 'candy100', name: 'Bec sucré', desc: 'Attrape 100 bonbons au total', test: () => save.stats.candy >= 100 },
-    { id: 'combo30', name: 'Mains en or', desc: 'Fais un combo de 50', test: () => save.stats.combo >= 50 },
-    { id: 'combo60', name: 'Intouchable', desc: 'Fais un combo de 100', test: () => save.stats.combo >= 100 },
-    { id: 'score200', name: 'Star du Chrono', desc: 'Marque 400 points en Chrono', test: () => save.best.chrono >= 400 },
-    { id: 'surv300', name: 'Survivant', desc: 'Marque 600 points en Survie', test: () => save.best.survie >= 600 },
+    { id: 'combo30', name: 'Mains en or', desc: 'Fais un combo de 60', test: () => save.stats.combo >= 60 },
+    { id: 'combo60', name: 'Intouchable', desc: 'Fais un combo de 120', test: () => save.stats.combo >= 120 },
+    { id: 'score200', name: 'Star du Chrono', desc: 'Marque 700 points en Chrono', test: () => save.best.chrono >= 700 },
+    { id: 'surv300', name: 'Survivant', desc: 'Marque 1200 points en Survie', test: () => save.best.survie >= 1200 },
     { id: 'lvl5', name: 'Machine infernale', desc: 'Atteins le niveau 5', test: () => save.stats.level >= 5 },
     { id: 'collect', name: 'Collectionneur', desc: 'Débloque tous les avatars', test: () => save.unlocked.length >= AVATARS.length },
   ];
@@ -173,8 +196,8 @@
     if (ac.state === 'suspended') ac.resume();
     return ac;
   }
-  function tone(freq, dur = 0.08, type = 'sine', vol = 0.12, slide = 0) {
-    if (save.mute) return;
+  const tone = (...a) => { if (save.sfx) beep(...a); };   // bruitages ; la musique appelle beep directement
+  function beep(freq, dur = 0.08, type = 'sine', vol = 0.12, slide = 0) {
     try {
       const a = audio();
       const o = a.createOscillator();
@@ -192,7 +215,7 @@
   }
   // Petit "pop" de maïs qui éclate
   function popSound(vol) {
-    if (save.mute) return;
+    if (!save.sfx) return;
     try {
       const a = audio();
       if (!noiseBuf) {
@@ -216,7 +239,7 @@
     } catch (e) {}
   }
   const jingle = (notes, gap, type) => notes.forEach((f, i) => setTimeout(() => tone(f, 0.15, type || 'triangle', 0.11), i * (gap || 110)));
-  const buzz = (ms) => { if (!save.mute && navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} } };
+  const buzz = (ms) => { if (save.sfx && navigator.vibrate) { try { navigator.vibrate(ms); } catch (e) {} } };
   const midi = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
   // Une petite boucle musicale par style (0 = silence)
@@ -245,17 +268,17 @@
   function music(on) {
     clearInterval(musicTimer);
     musicTimer = 0;
-    if (!on || save.mute) return;
+    if (!on || !save.music) return;
     const song = SONGS[save.theme] || SONGS.cinema;
     const stepMs = 60000 / song.bpm / 2;
     musicStep = 0;
     musicTimer = setInterval(() => {
       if (state !== 'play' && state !== 'count') return;
       const m = song.mel[musicStep % song.mel.length];
-      if (m) tone(midi(m), stepMs / 1000 * 1.6, song.wave, song.wave === 'square' ? 0.018 : 0.035);
+      if (m) beep(midi(m), stepMs / 1000 * 1.6, song.wave, song.wave === 'square' ? 0.018 : 0.035);
       const bar = Math.floor(musicStep / song.bar) % song.roots.length;
       const b = song.bass(song.roots[bar], musicStep % song.bar);
-      if (b) tone(midi(b), stepMs / 1000 * 1.8, 'sine', 0.05);
+      if (b) beep(midi(b), stepMs / 1000 * 1.8, 'sine', 0.05);
       musicStep++;
     }, stepMs);
   }
@@ -275,7 +298,7 @@
 
   const groundY = () => H - 24;
   const rimY = () => groundY() - 112 * PS;
-  const bucketHalf = () => (g && g.giant > 0 ? 58 : 34);
+  const bucketHalf = () => (g && g.giant > 0 ? 50 : 27);
   const lerp = (a, b, t) => a + (b - a) * t;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const avatar = () => AVATARS.find((a) => a.id === save.avatar) || AVATARS[0];
@@ -304,8 +327,9 @@
       got: { pop: 0, candy: 0 }, n: { sucette: 0, brule: 0 },
       giant: 0, magnet: 0, hurt: 0, miss: 0, level: 1,
       event: null, nextEvent: 11 + Math.random() * 6,
-      count: 3, lastTick: 11, banner: null, banked: false,
+      count: 3, lastTick: 11, banner: null, banked: false, recordShown: false, tuto: null,
     };
+    if (m === 'tuto') { g.tuto = { step: 0, n: 0, t: 0, sp: 0, moved: 0, lx: W / 2 }; g.count = 0.8; g.banked = true; }
     items = []; parts = []; texts = [];
     player.x = player.tx = W / 2;
     player.lean = 0; player.bounce = 0;
@@ -362,6 +386,24 @@
     return out;
   }
 
+  // Le déblocage le plus proche, pour donner un objectif en fin de partie.
+  function nextUnlockLine() {
+    const locked = AVATARS.filter((a) => !save.unlocked.includes(a.id)).concat(BUCKETS.filter((b) => !save.buckets.includes(b.id)));
+    let best = null;
+    for (const o of locked) {
+      const np = Math.max(0, (o.pop || 0) - save.pop);
+      const nc = Math.max(0, (o.candy || 0) - save.candy);
+      const need = np + nc * 5;
+      if (!best || need < best.need) best = { o, np, nc, need };
+    }
+    if (!best) return '';
+    if (best.need === 0) return 'Tu peux débloquer ' + best.o.name + ' dans le vestiaire !';
+    const miss = [];
+    if (best.np) miss.push(best.np + ' 🍿');
+    if (best.nc) miss.push(best.nc + ' 🍬');
+    return 'Encore ' + miss.join(' et ') + ' pour débloquer ' + best.o.name;
+  }
+
   function endGame() {
     const out = finish(true);
     state = 'over';
@@ -374,8 +416,22 @@
     const extra = $('#overExtra');
     extra.textContent = '';
     const lines = ['Niveau ' + g.level + ' · combo max ' + g.maxCombo].concat(out ? out.lines : []);
+    const unlock = nextUnlockLine();
+    if (unlock) lines.push(unlock);
     if (!save.player.name) lines.push('Choisis un pseudo dans Classement pour comparer ton score');
-    trySync();
+    // Rang au classement mondial, ajouté dès que le serveur répond
+    const thisGame = g;
+    const thisMode = mode;
+    Promise.resolve(trySync()).then(() => {
+      if (!save.player.name || !save.player.id || !window.Online) return null;
+      return window.Online.top(thisMode, null, save.player.id);
+    }).then((rows) => {
+      const me = (rows || []).find((r) => r.me);
+      if (!me || g !== thisGame || state !== 'over') return;
+      const p = document.createElement('p');
+      p.textContent = 'Classement mondial : ' + me.pos + (me.pos === 1 ? 'er' : 'e');
+      extra.append(p);
+    }).catch(() => {});
     for (const l of lines) {
       const p = document.createElement('p');
       p.textContent = l;
@@ -387,14 +443,18 @@
   }
 
   function difficulty() {
-    return (mode === 'chrono' ? g.time / 60 : g.time / 90) + (g.level - 1) * 0.1;
+    return (mode === 'chrono' ? g.time / 60 : g.time / 75) + (g.level - 1) * 0.12;
   }
 
+  // Un événement est annoncé EVENT_WARN secondes avant de commencer réellement.
+  const EVENT_WARN = 1.2;
+  const evOn = (type) => !!(g && g.event && g.event.warn <= 0 && g.event.type === type);
+
   function pickType(d) {
-    const ev = g.event && g.event.type;
+    const ev = g.event && g.event.warn <= 0 ? g.event.type : null;
     const r = Math.random();
     if (ev === 'pluie') return r < 0.68 ? 'pop' : r < 0.86 ? 'caramel' : 'bonbon';
-    const burnt = ev === 'chauffe' ? 0.55 : 0.08 + 0.12 * Math.min(d, 1.6);
+    const burnt = ev === 'chauffe' ? 0.55 : 0.10 + 0.16 * Math.min(d, 1.6);
     if (r < burnt) return 'brule';
     const q = (r - burnt) / (1 - burnt);
     if (q < 0.03) return 'arc';
@@ -412,12 +472,12 @@
       type,
       x: machine.x + dir * (twin ? 30 * MS : 6),
       y: MY + 112 * MS,
-      vx: dir * (15 + Math.random() * 150) * k,
+      vx: dir * (20 + Math.random() * 190) * k,
       vy: -90 + Math.random() * 130,
       rot: Math.random() * TAU,
       vr: (Math.random() - 0.5) * 7,
       seed: Math.random() * 360,
-      free: !!(g && g.event && g.event.type === 'pluie'),
+      free: evOn('pluie'),
     });
     machine.shake = 0.12;
     if (!quiet) popSound(0.09);
@@ -426,11 +486,11 @@
   function startEvent() {
     const type = Math.random() < 0.55 ? 'pluie' : 'chauffe';
     if (type === 'pluie') {
-      g.event = { type, t: 5 };
+      g.event = { type, t: 5, warn: EVENT_WARN };
       banner('Pluie de pop-corn !', '#ffe27a');
       jingle([659, 784, 988, 1175], 70);
     } else {
-      g.event = { type, t: 4 };
+      g.event = { type, t: 4, warn: EVENT_WARN };
       banner('Surchauffe ! Attention !', '#ff9d6b');
       tone(220, 0.5, 'sawtooth', 0.1, 300);
       buzz(80);
@@ -463,26 +523,30 @@
   function caught(it) {
     const x = it.x;
     const y = rimY();
+    if (mode === 'tuto') tutoCaught(it);
     if (it.type === 'brule') {
       g.combo = 0;
       g.n.brule++;
+      shakeT = 0.35;
+      slowT = 0.3;
       burst(x, y, '#6b5a55', 12);
       if (mode === 'survie') {
         loseLife(x, y - 12, '−1 ❤');
       } else {
         g.hurt = 0.5;
-        g.score = Math.max(0, g.score - 5);
-        floatText('−5', x, y - 12, '#ff8a8a');
+        g.score = Math.max(0, g.score - 10);
+        floatText('−10', x, y - 12, '#ff8a8a');
         tone(130, 0.28, 'sawtooth', 0.14, -70);
         buzz(140);
       }
       return;
     }
     const T = TYPES[it.type];
+    const multBefore = Math.min(5, 1 + Math.floor(g.combo / COMBO_STEP));
     g.combo++;
     g.miss = 0;
     g.maxCombo = Math.max(g.maxCombo, g.combo);
-    const mult = Math.min(5, 1 + Math.floor(g.combo / 8));
+    const mult = Math.min(5, 1 + Math.floor(g.combo / COMBO_STEP));
     const pts = T.pts * mult;
     g.score += pts;
     g.got[T.cur]++;
@@ -502,15 +566,70 @@
       tone((sweet ? 700 : 520) + Math.min(g.combo, 24) * 22, 0.07, 'triangle', 0.11);
       buzz(sweet ? 20 : 10);
     }
+    if (mult > multBefore) {
+      banner('Combo x' + mult + ' !', '#ffd257');
+      jingle([660, 880, 1100], 70);
+      burst(x, y - 20, '#ffd257', 14, true);
+      buzz(30);
+    }
     const lvl = 1 + Math.floor(g.score / LEVEL_PTS);
     if (lvl > g.level) {
       g.level = lvl;
       banner('Niveau ' + lvl + ' !', '#ffe27a');
       jingle([523, 659, 784], 90);
     }
+    if (mode !== 'tuto' && !g.recordShown && save.best[mode] > 0 && g.score > save.best[mode]) {
+      g.recordShown = true;
+      banner('Nouveau record !', '#ffe27a');
+      jingle([784, 988, 1175, 1568], 90);
+    }
+  }
+
+  // ---------- Tutoriel jouable ----------
+  const TUTO = ['Glisse ton doigt pour bouger le seau', 'Attrape 3 pop-corn !', 'Un bonbon vaut plus de points !', 'Laisse tomber le grain brûlé !'];
+  function tutoSay(txt, col) { g.banner = { txt: txt || TUTO[g.tuto.step], col: col || '#fff4d6', t: 1.7 }; }
+  function tutoNext() {
+    const t = g.tuto;
+    t.step++; t.n = 0; t.t = 0; t.sp = 0.7;
+    if (t.step >= TUTO.length) { t.t = -2.2; tutoSay('Bravo ! À toi de jouer !', '#ffe27a'); jingle([523, 659, 784, 1047], 110); }
+    else { tutoSay(); tone(784, 0.12, 'triangle'); }
+  }
+  function tutoUpdate(dt) {
+    const t = g.tuto;
+    if (g.banner) g.banner.t = Math.max(g.banner.t, 1.2);   // la consigne reste affichée
+    t.t += dt;
+    if (t.step >= TUTO.length) { if (t.t >= 0) tutoEnd(); return; }
+    if (t.step === 0) {
+      t.moved += Math.abs(player.x - t.lx);
+      t.lx = player.x;
+      if (t.moved > 70 && t.t > 1.2) tutoNext();
+      return;
+    }
+    t.sp -= dt;
+    if (t.sp <= 0) { spawn(['', 'pop', 'bonbon', 'brule'][t.step]); t.sp = [0, 1.2, 1.7, 2.6][t.step]; }
+  }
+  function tutoCaught(it) {
+    const t = g.tuto;
+    if (t.step === 1 && it.type === 'pop') { if (++t.n >= 3) tutoNext(); }
+    else if (t.step === 2 && it.type === 'bonbon') tutoNext();
+    else if (t.step === 3 && it.type === 'brule') tutoSay('Oups ! Laisse-le tomber', '#ff9d6b');
+  }
+  function tutoFloor(it) { if (g.tuto.step === 3 && it.type === 'brule') tutoNext(); }
+  function tutoEnd() {
+    music(false);
+    save.tuto = true;
+    persist();
+    state = 'menu';
+    items = [];
+    buildMenu();
+    show('menu');
   }
 
   // ---------- Mise à jour ----------
+  let shakeT = 0;   // secousse d'écran
+  let slowT = 0;    // bref ralenti
+  const calm = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+
   function movePlayer(dt) {
     const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
     if (dir) player.tx += dir * 520 * dt;
@@ -524,7 +643,7 @@
   function update(dt) {
     machine.t += dt;
     const lvl = g && inGame() ? g.level : 1;
-    machine.ph += dt * (0.7 + 0.07 * Math.min(lvl - 1, 6));
+    machine.ph += dt * (0.85 + 0.1 * Math.min(lvl - 1, 6));
     machine.x = W / 2 + Math.sin(machine.ph) * Math.min(W * 0.24, 230);
     machine.shake = Math.max(0, machine.shake - dt);
     if (g && g.banner) { g.banner.t -= dt; if (g.banner.t <= 0) g.banner = null; }
@@ -535,7 +654,7 @@
       g.count -= dt;
       const after = Math.ceil(g.count);
       if (after !== before && after > 0) tone(520, 0.1, 'triangle');
-      if (g.count <= 0) { state = 'play'; banner('C\'est parti !'); tone(1040, 0.2, 'triangle'); }
+      if (g.count <= 0) { state = 'play'; if (mode === 'tuto') tutoSay(); else banner('C\'est parti !'); tone(1040, 0.2, 'triangle'); }
       movePlayer(dt);
     } else if (state === 'play') {
       g.time += dt;
@@ -550,8 +669,9 @@
       g.magnet = Math.max(0, g.magnet - dt);
       g.hurt = Math.max(0, g.hurt - dt);
 
-      if (g.event) {
-        g.event.t -= dt;
+      if (mode === 'tuto') tutoUpdate(dt);
+      else if (g.event) {
+        if (g.event.warn > 0) g.event.warn -= dt; else g.event.t -= dt;
         if (g.event.type === 'chauffe') machine.shake = 0.1;
         if (g.event.t <= 0) g.event = null;
       } else {
@@ -560,12 +680,12 @@
       }
 
       g.spawn -= dt;
-      if (g.spawn <= 0) {
+      if (mode !== 'tuto' && g.spawn <= 0) {
         const dd = Math.min(d, 1);
-        const rain = g.event && g.event.type === 'pluie';
+        const rain = evOn('pluie');
         spawn(pickType(d));
-        if (Math.random() < 0.2 + 0.25 * dd) spawn(pickType(d));
-        g.spawn = lerp(0.62, 0.27, dd) * (0.8 + Math.random() * 0.4) * (rain ? 0.35 : 1);
+        if (Math.random() < 0.2 + 0.3 * dd) spawn(pickType(d));
+        g.spawn = lerp(0.6, 0.23, dd) * (0.8 + Math.random() * 0.4) * (rain ? 0.35 : 1);
       }
       movePlayer(dt);
     } else {
@@ -575,7 +695,7 @@
     }
 
     const playing = state === 'play';
-    const grav = H * 0.5 * (1 + 0.25 * Math.min(d, 1.6));
+    const grav = H * 0.55 * (1 + 0.35 * Math.min(d, 1.6));
     const gy = groundY();
     const ry = rimY();
     const bw = bucketHalf() * PS;
@@ -592,7 +712,7 @@
       if (it.x < WALL + rad) { it.x = WALL + rad; it.vx = Math.abs(it.vx) * 0.7; }
       if (it.x > W - WALL - rad) { it.x = W - WALL - rad; it.vx = -Math.abs(it.vx) * 0.7; }
 
-      if (playing && it.vy > 0 && it.y > ry - 8 && it.y < ry + 26 && Math.abs(it.x - player.x) < bw + 4) {
+      if (playing && it.vy > 0 && it.y > ry - 8 && it.y < ry + 26 && Math.abs(it.x - player.x) < bw + 2) {
         items.splice(i, 1);
         caught(it);
         if (state !== 'play') return;
@@ -601,8 +721,9 @@
       if (it.y > gy - rad * 0.5) {
         items.splice(i, 1);
         burst(it.x, gy - 4, it.type === 'brule' ? '#4a3a35' : '#fff1c9', 3);
+        if (playing && mode === 'tuto') tutoFloor(it);
         if (playing && it.type !== 'brule' && !it.free) {
-          if (g.combo >= 8) floatText('Combo perdu', it.x, gy - 34, '#ffb37a');
+          if (g.combo >= COMBO_STEP) floatText('Combo perdu', it.x, gy - 34, '#ffb37a');
           g.combo = 0;
           if (mode === 'survie') {
             g.miss++;
@@ -894,6 +1015,16 @@
   // Personnage complet, pieds en (0,0) : sert au jeu et à l'aperçu du menu.
   function drawFigure(c, a, bucketId, bw, mood, fill) {
     const bb = bw * 0.72;
+    if (a.cape) {
+      for (const pass of [1, 0]) {
+        const o = pass ? 1.4 : 0;
+        c.fillStyle = pass ? OUT : a.cape;
+        c.beginPath();
+        c.moveTo(-12 - o, -33 - o); c.lineTo(12 + o, -33 - o); c.lineTo(22 + o, -2 + o);
+        c.quadraticCurveTo(0, -9, -22 - o, -2 + o);
+        c.closePath(); c.fill();
+      }
+    }
     if (a.shirt) {
       c.fillStyle = '#3a2019';
       rr(c, -15, -7, 13, 8, 3.5); c.fill();
@@ -921,7 +1052,7 @@
   function drawPlayer() {
     const gy = groundY();
     const bw = bucketHalf();
-    const mood = g.hurt > 0 ? 'sad' : (player.bounce > 0 || g.combo >= 8) ? 'happy' : '';
+    const mood = g.hurt > 0 ? 'sad' : (player.bounce > 0 || g.combo >= COMBO_STEP) ? 'happy' : '';
     const sq = player.bounce > 0 ? Math.sin(player.bounce / 0.25 * Math.PI) * 0.09 : 0;
 
     ctx.fillStyle = 'rgba(0,0,0,.28)';
@@ -956,6 +1087,11 @@
   }
 
   function draw() {
+    const shaking = shakeT > 0 && !calm && state === 'play';
+    if (shaking) {
+      ctx.save();
+      ctx.translate((Math.random() - 0.5) * 24 * shakeT, (Math.random() - 0.5) * 24 * shakeT);
+    }
     drawBg();
     for (const it of items) {
       const s = TYPES[it.type].s;
@@ -989,18 +1125,21 @@
         const n = Math.max(1, Math.ceil(g.count));
         const f = g.count - Math.floor(g.count);
         bigText(String(n), W / 2, H * 0.48, 110 + f * 40, '#fff4d6', 1);
-        bigText('Glisse ton doigt pour déplacer le seau', W / 2, H * 0.48 + 110, 17, '#fff4d6', 1);
+        bigText('Glisse ton doigt n\'importe où pour déplacer le seau', W / 2, H * 0.48 + 110, Math.min(17, W / 25), '#fff4d6', 1);
       }
       if (g.banner) {
         const a = clamp(g.banner.t * 2, 0, 1);
         const pop = 1 + Math.max(0, g.banner.t - 1.5) * 2;
-        bigText(g.banner.txt, W / 2, H * 0.42, Math.min(34, W / 13) * pop, g.banner.col, a);
+        // Taille réduite pour les textes longs, afin qu'ils tiennent dans la largeur
+        const size = Math.min(34, W / 13, (W - 44) / (g.banner.txt.length * 0.6));
+        bigText(g.banner.txt, W / 2, H * 0.42, size * pop, g.banner.col, a);
       }
       if (g.hurt > 0 && state === 'play') {
         ctx.fillStyle = 'rgba(255,40,40,' + g.hurt * 0.45 + ')';
         ctx.fillRect(0, 0, W, H);
       }
     }
+    if (shaking) ctx.restore();
   }
 
   // ---------- Interface ----------
@@ -1008,13 +1147,25 @@
   function setText(id, v) {
     if (hudCache[id] !== v) { hudCache[id] = v; $('#' + id).textContent = v; }
   }
+  function setBar(id, pct) {
+    if (hudCache['w:' + id] !== pct) { hudCache['w:' + id] = pct; $('#' + id).style.width = pct + '%'; }
+  }
+  function setClass(id, cls, on) {
+    const k = 'c:' + id + cls;
+    if (hudCache[k] !== on) { hudCache[k] = on; $('#' + id).classList.toggle(cls, on); }
+  }
   function updateHud() {
     if (!g) return;
     setText('score', String(g.score));
-    const mult = Math.min(5, 1 + Math.floor(g.combo / 8));
+    const mult = Math.min(5, 1 + Math.floor(g.combo / COMBO_STEP));
     setText('combo', mult > 1 ? 'x' + mult : '');
     setText('level', 'Niv. ' + g.level);
-    setText('status', mode === 'chrono' ? '⏱ ' + Math.ceil(g.left) : '❤'.repeat(Math.max(0, g.lives)));
+    setText('status', mode === 'chrono' ? '⏱ ' + Math.ceil(g.left) : mode === 'tuto' ? 'Tutoriel' : '❤'.repeat(Math.max(0, g.lives)));
+    setBar('comboBar', mult >= 5 ? 100 : Math.round((g.combo % COMBO_STEP) / COMBO_STEP * 100));
+    setClass('comboWrap', 'max', mult >= 5);
+    const power = Math.max(g.giant, g.magnet);
+    setClass('powerWrap', 'hidden', power <= 0);
+    setBar('powerBar', Math.round(power / 8 * 100));
     let pw = '';
     if (g.giant > 0) pw = 'Seau géant ' + Math.ceil(g.giant);
     else if (g.magnet > 0) pw = 'Aimant ' + Math.ceil(g.magnet);
@@ -1026,6 +1177,7 @@
   function show(which) {
     for (const id of SCREENS) $('#' + id).classList.toggle('hidden', id !== which);
     $('#hud').classList.toggle('hidden', which !== 'hud' && which !== 'pause');
+    $('#update').classList.toggle('ingame', which === 'hud' || which === 'pause');
   }
 
   let toastTimer = 0;
@@ -1057,11 +1209,23 @@
     c.restore();
   }
 
+  // Passe à l'avatar débloqué précédent ou suivant, directement depuis le menu.
+  function cycleAvatar(dir) {
+    const owned = AVATARS.filter((a) => save.unlocked.includes(a.id));
+    const i = Math.max(0, owned.findIndex((a) => a.id === save.avatar));
+    save.avatar = owned[(i + dir + owned.length) % owned.length].id;
+    persist();
+    buildMenu();
+    tone(600, 0.05, 'triangle', 0.08);
+  }
+
   function buildMenu() {
     ensureDaily();
     $('#wallet').textContent = walletText();
     $('#best').textContent = 'Records — Chrono : ' + save.best.chrono + ' · Survie : ' + save.best.survie;
-    $('#btnSound').textContent = save.mute ? '🔇 Son coupé' : '🔊 Son activé';
+    $('#btnMusic').textContent = (save.music ? '🎵' : '🔇') + ' Musique';
+    $('#btnSfx').textContent = (save.sfx ? '🔊' : '🔇') + ' Bruitages';
+    $('#avName').textContent = avatar().name;
     drawPreview();
     const list = $('#daily');
     list.textContent = '';
@@ -1232,6 +1396,8 @@
 
   function goMenu() {
     const out = finish(false);
+    music(false);
+    checkVersion();
     state = 'menu';
     items = [];
     buildMenu();
@@ -1396,17 +1562,45 @@
   });
   window.addEventListener('online', trySync);
   $('#btnHelp').addEventListener('click', openHelp);
-  $('#btnHelpOk').addEventListener('click', () => { save.tuto = true; persist(); buildMenu(); show('menu'); });
-  $('#btnSound').addEventListener('click', () => { save.mute = !save.mute; persist(); buildMenu(); tone(600, 0.06); });
+  $('#btnHelpOk').addEventListener('click', () => {
+    const first = !save.tuto;
+    save.tuto = true;
+    persist();
+    if (first) newGame('tuto'); else { buildMenu(); show('menu'); }
+  });
+  $('#btnMusic').addEventListener('click', () => { save.music = !save.music; persist(); buildMenu(); tone(600, 0.06); });
+  $('#btnSfx').addEventListener('click', () => { save.sfx = !save.sfx; persist(); buildMenu(); tone(600, 0.06); });
+  $('#btnPrev').addEventListener('click', () => cycleAvatar(-1));
+  $('#btnNext').addEventListener('click', () => cycleAvatar(1));
+  $('#btnTuto').addEventListener('click', () => { save.tuto = true; persist(); newGame('tuto'); });
+  $('#btnUpdate').addEventListener('click', () => location.reload());
 
   // ---------- Commandes ----------
+  // Au doigt, le seau suit le mouvement et non la position : on peut glisser n'importe où
+  // sur l'écran sans cacher le personnage. À la souris, il suit directement le pointeur.
+  const DRAG_GAIN = 1.25;   // le seau va un peu plus vite que le doigt, pour couvrir l'écran sans grand geste
+  let dragId = null;
+  let dragX = 0;
   function pointer(e) {
-    if (state !== 'play' && state !== 'count') return;
-    const r = canvas.getBoundingClientRect();
-    player.tx = (e.clientX - r.left) / scale;
+    if (state !== 'play' && state !== 'count') { dragId = null; return; }
+    if (e.pointerType === 'mouse') {
+      const r = canvas.getBoundingClientRect();
+      player.tx = (e.clientX - r.left) / scale;
+      return;
+    }
+    if (e.type === 'pointerdown' || e.pointerId !== dragId) {
+      dragId = e.pointerId;
+      dragX = e.clientX;
+      return;
+    }
+    player.tx = clamp(player.tx + (e.clientX - dragX) / scale * DRAG_GAIN, WALL + 30, W - WALL - 30);
+    dragX = e.clientX;
   }
+  const pointerEnd = (e) => { if (e.pointerId === dragId) dragId = null; };
   canvas.addEventListener('pointerdown', pointer);
   canvas.addEventListener('pointermove', pointer);
+  canvas.addEventListener('pointerup', pointerEnd);
+  canvas.addEventListener('pointercancel', pointerEnd);
   window.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowLeft') keys.left = true;
     else if (e.key === 'ArrowRight') keys.right = true;
@@ -1416,16 +1610,33 @@
     if (e.key === 'ArrowLeft') keys.left = false;
     else if (e.key === 'ArrowRight') keys.right = false;
   });
-  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); else checkVersion(); });
   document.addEventListener('contextmenu', (e) => e.preventDefault());
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', resize);
 
+  // ---------- Avis de mise à jour ----------
+  // version.txt est écrit à chaque publication. S'il change pendant que le jeu est ouvert, on propose de recharger.
+  let bootVersion = null;
+  async function checkVersion() {
+    try {
+      const r = await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      const v = (await r.text()).trim();
+      if (!v || v.length > 80) return;
+      if (bootVersion === null) bootVersion = v;
+      else if (v !== bootVersion) $('#update').classList.remove('hidden');
+    } catch (e) {}
+  }
+
   // ---------- Boucle ----------
   let last = 0;
   function frame(t) {
-    const dt = Math.min(0.033, (t - last) / 1000 || 0);
+    const real = Math.min(0.033, (t - last) / 1000 || 0);
     last = t;
+    shakeT = Math.max(0, shakeT - real);
+    slowT = Math.max(0, slowT - real);
+    const dt = slowT > 0 && state === 'play' ? real * 0.35 : real;
     if (state !== 'pause') update(dt);
     draw();
     if (state === 'play' || state === 'count') updateHud();
@@ -1437,6 +1648,8 @@
   machine.x = player.x = player.tx = W / 2;
   buildMenu();
   if (save.tuto) show('menu'); else openHelp();
+  checkVersion();
+  if (rulesNotice) { persist(); toast('Le jeu est devenu plus corsé : les records repartent de zéro !'); }
   trySync();
   requestAnimationFrame(frame);
 
