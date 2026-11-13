@@ -19,8 +19,6 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
-  // Le contrôle de version doit toujours interroger le réseau, sans passer par le cache.
-  if (e.request.url.includes('version.txt')) return;
   e.respondWith(
     fetch(e.request)
       .then((res) => {

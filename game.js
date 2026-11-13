@@ -1616,14 +1616,18 @@
   window.addEventListener('orientationchange', resize);
 
   // ---------- Avis de mise à jour ----------
-  // version.txt est écrit à chaque publication. S'il change pendant que le jeu est ouvert, on propose de recharger.
+  // On relève l'empreinte (en-tête ETag) des fichiers du jeu. Si elle change pendant que le jeu
+  // est ouvert, une publication a eu lieu : on propose de recharger.
+  const VERSION_FILES = ['index.html', 'game.js', 'art.js', 'style.css'];
   let bootVersion = null;
   async function checkVersion() {
     try {
-      const r = await fetch('version.txt?t=' + Date.now(), { cache: 'no-store' });
-      if (!r.ok) return;
-      const v = (await r.text()).trim();
-      if (!v || v.length > 80) return;
+      const tags = await Promise.all(VERSION_FILES.map(async (f) => {
+        const r = await fetch(f + '?v=' + Date.now(), { method: 'HEAD', cache: 'no-store' });
+        return r.ok ? (r.headers.get('etag') || '') : null;
+      }));
+      if (tags.some((t) => !t)) return;          // hors ligne, ou serveur sans ETag (test local)
+      const v = tags.join('|');
       if (bootVersion === null) bootVersion = v;
       else if (v !== bootVersion) $('#update').classList.remove('hidden');
     } catch (e) {}
