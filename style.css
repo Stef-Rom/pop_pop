@@ -477,3 +477,8 @@ h2.title { margin-top: 0; font-size: 26px; font-weight: 900; color: var(--accent
 .btn.fifth:active { box-shadow: 0 2px 0 #a8346f; }
 .btn.fourth { background: #17907c; box-shadow: 0 5px 0 #0d5f52; color: #fff; }
 .btn.fourth:active { box-shadow: 0 2px 0 #0d5f52; }
+
+/* Bouton du mode Attrape-tout, sur toute la largeur */
+.modes.more .btn.wide { grid-column: span 2; }
+.btn.seventh { background: #f2b705; box-shadow: 0 5px 0 #b07f00; color: #4a2a00; }
+.btn.seventh:active { box-shadow: 0 2px 0 #b07f00; }

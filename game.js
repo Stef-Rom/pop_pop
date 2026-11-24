@@ -109,12 +109,12 @@
     pop: 0, candy: 0,
     unlocked: FREE.slice(), avatar: 'leo',
     buckets: ['classique'], bucket: 'classique',
-    best: { chrono: 0, survie: 0, brique: 0, invasion: 0, empile: 0, laby: 0 },
+    best: { chrono: 0, survie: 0, brique: 0, invasion: 0, empile: 0, laby: 0, rafle: 0 },
     sfx: true, music: true, theme: 'cinema', tuto: false, rules: RULES,
     stats: { games: 0, pop: 0, candy: 0, sucette: 0, burnt: 0, combo: 0, level: 1 },
     ach: [], daily: null,
     player: { id: '', name: '', grp: '' },      // profil du classement en ligne
-    dirty: { chrono: false, survie: false, brique: false, invasion: false, empile: false, laby: false },    // records pas encore envoyés
+    dirty: { chrono: false, survie: false, brique: false, invasion: false, empile: false, laby: false, rafle: false },    // records pas encore envoyés
   };
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
@@ -138,7 +138,7 @@
       // Les règles ont changé : les anciens records ne sont plus comparables, ils repartent de zéro.
       if (s.rules !== RULES) {
         rulesNotice = save.best.chrono > 0 || save.best.survie > 0;
-        save.best = { chrono: 0, survie: 0, brique: save.best.brique || 0, invasion: save.best.invasion || 0, empile: save.best.empile || 0, laby: save.best.laby || 0 };
+        save.best = { chrono: 0, survie: 0, brique: save.best.brique || 0, invasion: save.best.invasion || 0, empile: save.best.empile || 0, laby: save.best.laby || 0, rafle: save.best.rafle || 0 };
         save.dirty = { chrono: false, survie: false };
         save.rules = RULES;
       }
@@ -331,8 +331,11 @@
       event: null, nextEvent: 11 + Math.random() * 6,
       count: 3, lastTick: 11, banner: null, banked: false, recordShown: false, tuto: null, rapid: 0, invul: 0, fire: 0, benter: 0,
     };
+    if (m === 'rafle') {
+      g.raf = { list: [], fx: [], trail: [], last: null, waveT: 0.4, chain: 0, chainT: 0, frenzy: 0, frenzyT: 0, slow: 0 };
+    }
     if (m === 'laby') {
-      g.laby = { dots: [], left: 0, p: null, foes: [], want: -1, fright: 0, chain: 0, munch: 0, bonus: null, bonusT: 14 };
+      g.laby = { map: LABY_MAPS[0], dots: [], left: 0, p: null, foes: [], fx: [], pops: [], want: -1, fright: 0, magnet: 0, boost: 0, freeze: 0, chain: 0, munch: 0, run: 0, lastMunch: 0, bonus: null, bonusT: 14, dying: 0, ready: 0, clearing: 0, near: false, beat: 0 };
       labyFill();
       labyPlace();
     }
@@ -480,7 +483,7 @@
   }
 
   function difficulty() {
-    if (mode === 'brique' || mode === 'invasion' || mode === 'empile' || mode === 'laby') return 0.3;
+    if (mode === 'brique' || mode === 'invasion' || mode === 'empile' || mode === 'laby' || mode === 'rafle') return 0.3;
     return (mode === 'chrono' ? g.time / 60 : g.time / 75) + (g.level - 1) * 0.12;
   }
 
@@ -1924,29 +1927,69 @@
 
   // ---------- Mode Labyrinthe ----------
   // L'avatar parcourt un dédale pour ramasser tout le pop-corn, poursuivi par des grains brûlés.
-  // Un bonbon ouvre un court « festin » pendant lequel on peut les croquer.
-  const LABY_MAP = [
-    '###########',
-    '#o.......o#',
-    '#.##.#.##.#',
-    '#....#....#',
-    '##.#.#.#.##',
-    '#..#...#..#',
-    '#.##.#.##.#',
-    '#.........#',
-    '#.##.#.##.#',
-    '#..#...#..#',
-    '##.#.#.#.##',
-    '#....#....#',
-    '#.##.#.##.#',
-    '#o.......o#',
-    '###########',
+  // Un bonbon ouvre un court « festin » pendant lequel on peut les croquer. Le dédale change à chaque niveau.
+  const LABY_MAPS = [
+    [
+      '###########',
+      '#o.......o#',
+      '#.##.#.##.#',
+      '#....#....#',
+      '##.#.#.#.##',
+      '#..#...#..#',
+      '#.##.#.##.#',
+      '#.........#',
+      '#.##.#.##.#',
+      '#..#...#..#',
+      '##.#.#.#.##',
+      '#....#....#',
+      '#.##.#.##.#',
+      '#o.......o#',
+      '###########',
+    ],
+    [
+      '###########',
+      '#o...#...o#',
+      '#.#.....#.#',
+      '#.#.###.#.#',
+      '#.........#',
+      '###.#.#.###',
+      '#...#.#...#',
+      '#.#.....#.#',
+      '#...#.#...#',
+      '###.#.#.###',
+      '#.........#',
+      '#.#.###.#.#',
+      '#.#.....#.#',
+      '#o.......o#',
+      '###########',
+    ],
+    [
+      '###########',
+      '#o.......o#',
+      '#.###.###.#',
+      '#.........#',
+      '#.##.#.##.#',
+      '#.#.....#.#',
+      '#.#.#.#.#.#',
+      '#...#.#...#',
+      '#.#.#.#.#.#',
+      '#.#.....#.#',
+      '#.##.#.##.#',
+      '#.........#',
+      '#.###.###.#',
+      '#o.......o#',
+      '###########',
+    ],
   ];
   const LCOLS = 11, LROWS = 15;
   const LABY_HOME = [5, 7];       // départ des poursuivants
   const LABY_START = [5, 13];     // départ du joueur
   const LABY_DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];   // haut, droite, bas, gauche
   const LABY_FOES = ['brule', 'braise', 'fumee', 'costaud'];
+  // Objets spéciaux : aimant (ramasse autour de soi), éclair (vitesse), glaçon (fige les poursuivants)
+  const LABY_SPECIAL = { m: ['magnet', 6, 'Aimant !'], e: ['boost', 5, 'Turbo !'], g: ['freeze', 4, 'Gel !'] };
+  // Façons de disparaître d'un poursuivant croqué, selon son type
+  const LABY_WAYS = { brule: ['eclate', 'evapore', 'tombe'], braise: ['eclate'], fumee: ['evapore'], costaud: ['tombe'] };
   let labyTouch = null;
 
   function labyGeom() {
@@ -1955,19 +1998,41 @@
     const w = cell * LCOLS, h = cell * LROWS;
     return { cell, x0: Math.round((W - w) / 2), y0: Math.round(66 + (gy - 70 - h) / 2), w, h };
   }
-  const labyOpen = (c, r) => r >= 0 && r < LROWS && c >= 0 && c < LCOLS && LABY_MAP[r][c] !== '#';
+  const labyWall = (c, r) => r >= 0 && r < LROWS && c >= 0 && c < LCOLS && g.laby.map[r][c] === '#';
+  const labyOpen = (c, r) => r >= 0 && r < LROWS && c >= 0 && c < LCOLS && g.laby.map[r][c] !== '#';
   const labyMob = (c, r, kind) => ({ c, r, tc: c, tr: r, t: 1, dir: -1, kind, home: 0, scared: false });
   // Position affichée d'un mobile, en cases (entre sa case de départ et sa case d'arrivée)
   const labyPos = (m) => [m.c + (m.tc - m.c) * m.t, m.r + (m.tr - m.r) * m.t];
+  const labyPx = (cx, cy) => { const G = labyGeom(); return [G.x0 + (cx + 0.5) * G.cell, G.y0 + (cy + 0.5) * G.cell]; };
+
+  // Bonus en cours, pour l'affichage en haut de l'écran
+  function labyPower() {
+    const L = g.laby;
+    if (L.fright > 0) return { txt: 'Festin ' + Math.ceil(L.fright), t: L.fright };
+    if (L.freeze > 0) return { txt: 'Gel ' + Math.ceil(L.freeze), t: L.freeze * 2 };
+    if (L.boost > 0) return { txt: 'Turbo ' + Math.ceil(L.boost), t: L.boost * 1.6 };
+    if (L.magnet > 0) return { txt: 'Aimant ' + Math.ceil(L.magnet), t: L.magnet * 1.33 };
+    return { txt: L.left <= 12 && L.left > 0 ? 'Reste ' + L.left : '', t: 0 };
+  }
 
   function labyFill() {
     const L = g.laby;
+    L.map = LABY_MAPS[(g.level - 1) % LABY_MAPS.length];
     L.left = 0;
-    L.dots = LABY_MAP.map((row, r) => row.split('').map((ch, c) => {
+    const plain = [];
+    L.dots = L.map.map((row, r) => row.split('').map((ch, c) => {
       if (ch === '#' || (c === LABY_HOME[0] && r === LABY_HOME[1]) || (c === LABY_START[0] && r === LABY_START[1])) return '';
       L.left++;
-      return ch === 'o' ? 'o' : '.';
+      if (ch === 'o') return 'o';
+      if (Math.abs(c - LABY_START[0]) + Math.abs(r - LABY_START[1]) > 4) plain.push([c, r]);
+      return Math.random() < 0.12 ? 'c' : '.';            // quelques pop-corn caramel, qui valent plus
     }));
+    // Deux objets spéciaux par niveau, placés au hasard
+    const kinds = ['m', 'e', 'g'].sort(() => Math.random() - 0.5).slice(0, 2);
+    for (const k of kinds) {
+      const [c, r] = plain.splice(Math.floor(Math.random() * plain.length), 1)[0];
+      L.dots[r][c] = k;
+    }
   }
 
   // Replace le joueur et les poursuivants à leur départ (le pop-corn déjà ramassé reste ramassé)
@@ -1976,7 +2041,10 @@
     L.p = labyMob(LABY_START[0], LABY_START[1], 'player');
     L.want = -1;
     L.fright = 0;
+    L.freeze = 0;
     L.chain = 0;
+    L.dying = 0;
+    L.ready = 1.1;            // court temps mort avant que tout bouge
     const n = Math.min(4, 2 + g.level);
     L.foes = LABY_FOES.slice(0, n).map((k, i) => {
       const m = labyMob(LABY_HOME[0], LABY_HOME[1], k);
@@ -2019,12 +2087,13 @@
   }
 
   function labyEat(c, r) {
-    const L = g.laby, G = labyGeom();
+    const L = g.laby;
     const what = L.dots[r][c];
-    const px = G.x0 + (c + 0.5) * G.cell, py = G.y0 + (r + 0.5) * G.cell;
+    const [px, py] = labyPx(c, r);
     if (what) {
       L.dots[r][c] = '';
       L.left--;
+      L.pops.push({ x: px, y: py, t: 0, big: what !== '.' });
       if (what === 'o') {
         g.score += 10;
         g.got.candy++;
@@ -2042,11 +2111,23 @@
         jingle([660, 880, 1100], 70);
         burst(px, py, '#ffb3da', 10, true);
         buzz(30);
+      } else if (LABY_SPECIAL[what]) {
+        const [key, dur, label] = LABY_SPECIAL[what];
+        L[key] = dur;
+        g.score += 10;
+        banner(label, '#9fe8ff');
+        jingle([784, 1047, 1319], 60);
+        burst(px, py, '#9fe8ff', 10, true);
+        buzz(30);
       } else {
-        g.score += 2;
+        // Les pop-corn ramassés à la suite font monter la note
+        const now = machine.t;
+        L.run = now - L.lastMunch < 0.45 ? Math.min(L.run + 1, 14) : 0;
+        L.lastMunch = now;
+        g.score += what === 'c' ? 5 : 2;
         L.munch++;
-        if (L.munch % 3 === 0) g.got.pop++;
-        tone(L.munch % 2 ? 620 : 520, 0.035, 'triangle', 0.07);
+        if (what === 'c' || L.munch % 3 === 0) g.got.pop++;
+        tone(480 + L.run * 28, 0.035, 'triangle', 0.07);
       }
       if (!g.recordShown && save.best.laby > 0 && g.score > save.best.laby) {
         g.recordShown = true;
@@ -2065,13 +2146,78 @@
     }
   }
 
+  // Un poursuivant croqué disparaît d'une des façons prévues pour son type
+  function labyCrunch(f, sx, sy) {
+    const L = g.laby;
+    const pts = 50 * Math.pow(2, Math.min(L.chain, 3));
+    L.chain++;
+    g.score += pts;
+    g.got.candy++;
+    floatText('+' + pts, sx, sy - 12, '#9fe8ff');
+    buzz(25);
+    const fx = { kind: f.kind, x: sx, y: sy, t: 0, dur: 0.34, type: 'eclate', rot: 0, vx: 0, vy: 0, vr: 0 };
+    if (Math.random() < 0.3) {
+      // Il se change en bonbon, qui file vers le compteur
+      fx.type = 'transforme';
+      fx.dur = 0.75;
+      g.got.candy++;
+      jingle([988, 1319], 60);
+    } else {
+      const ways = LABY_WAYS[f.kind] || ['eclate'];
+      fx.type = ways[Math.floor(Math.random() * ways.length)];
+      if (fx.type === 'evapore') { fx.dur = 0.85; tone(500, 0.3, 'sine', 0.06, 700); }
+      else if (fx.type === 'tombe') { fx.dur = 1.1; fx.vx = (Math.random() - 0.5) * 100; fx.vy = -170; fx.vr = (Math.random() < 0.5 ? -1 : 1) * 9; tone(420, 0.35, 'triangle', 0.07, -300); }
+      else { burst(sx, sy, f.kind === 'braise' ? '#ffb347' : '#fffaf0', 12); ring(sx, sy, '#fffaf0'); popSound(0.14); }
+    }
+    L.fx.push(fx);
+    Object.assign(f, labyMob(LABY_HOME[0], LABY_HOME[1], f.kind), { home: 3 });
+  }
+
   function labyUpdate(dt) {
     const L = g.laby, p = L.p;
     g.invul = Math.max(0, g.invul - dt);
+    for (let i = L.fx.length - 1; i >= 0; i--) {
+      const f = L.fx[i];
+      f.t += dt;
+      if (f.type === 'tombe') { f.vy += 760 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt; }
+      else if (f.type === 'evapore') f.y -= 46 * dt;
+      if (f.t >= f.dur) L.fx.splice(i, 1);
+    }
+    for (let i = L.pops.length - 1; i >= 0; i--) { L.pops[i].t += dt; if (L.pops[i].t > 0.25) L.pops.splice(i, 1); }
+
+    // Dédale vidé : les murs clignotent, puis le niveau suivant arrive
+    if (L.clearing > 0) {
+      L.clearing -= dt;
+      if (L.clearing <= 0) {
+        g.level++;
+        g.score += 100 * (g.level - 1);
+        banner('Niveau ' + g.level + ' !', '#ffe27a');
+        labyFill();
+        labyPlace();
+      }
+      return;
+    }
+    // Touché : l'avatar tournoie un instant avant de repartir
+    if (L.dying > 0) {
+      L.dying -= dt;
+      if (L.dying <= 0) {
+        const [x, y] = labyPx(...labyPos(p));
+        loseLife(x, y - 16, '−1 ❤');
+        if (state !== 'play') return;
+        labyPlace();
+        g.invul = 1.6;
+      }
+      return;
+    }
+    if (L.ready > 0) { L.ready -= dt; return; }
+
     if (L.fright > 0) {
       L.fright -= dt;
       if (L.fright <= 0) for (const f of L.foes) f.scared = false;
     }
+    L.magnet = Math.max(0, L.magnet - dt);
+    L.boost = Math.max(0, L.boost - dt);
+    L.freeze = Math.max(0, L.freeze - dt);
 
     // Sucette bonus : elle apparaît un moment au centre du dédale
     if (L.bonus) { L.bonus.t -= dt; if (L.bonus.t <= 0) { L.bonus = null; L.bonusT = 18; } }
@@ -2083,85 +2229,140 @@
       p.t = 1 - p.t;
       p.dir = L.want;
     }
-    labyMove(p, 5.4, dt, (m) => {
+    labyMove(p, L.boost > 0 ? 7.4 : 5.4, dt, (m) => {
       const can = (d) => d >= 0 && labyOpen(m.c + LABY_DIRS[d][0], m.r + LABY_DIRS[d][1]);
       return can(L.want) ? L.want : can(m.dir) ? m.dir : -1;
     });
     if (p.t >= 1) labyEat(p.tc, p.tr);
-
-    const fast = Math.min(5.1, 3.8 + 0.3 * (g.level - 1));
     const [px, py] = labyPos(p);
-    for (const f of L.foes) {
-      if (f.home > 0) { f.home -= dt; continue; }
-      labyMove(f, f.scared ? 2.4 : f.kind === 'costaud' ? fast * 0.85 : fast, dt, labyFoeChoice);
-      const [fx, fy] = labyPos(f);
-      if (Math.hypot(fx - px, fy - py) > 0.62) continue;
-      const G = labyGeom();
-      const sx = G.x0 + (fx + 0.5) * G.cell, sy = G.y0 + (fy + 0.5) * G.cell;
-      if (f.scared) {
-        // Croqué : il repart de son repaire après un délai
-        const pts = 50 * Math.pow(2, Math.min(L.chain, 3));
-        L.chain++;
-        g.score += pts;
-        g.got.candy++;
-        floatText('+' + pts, sx, sy - 10, '#9fe8ff');
-        burst(sx, sy, '#fffaf0', 12);
-        ring(sx, sy, '#fffaf0');
-        popSound(0.14);
-        buzz(25);
-        Object.assign(f, labyMob(LABY_HOME[0], LABY_HOME[1], f.kind), { home: 3 });
-      } else if (g.invul <= 0) {
-        shakeT = 0.3;
-        loseLife(sx, sy - 16, '−1 ❤');
-        if (state !== 'play') return;
-        labyPlace();
-        g.invul = 1.6;
-        return;
+    if (L.magnet > 0) {
+      // L'aimant ramasse tout ce qui est à moins de deux cases
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+        const c = Math.round(px) + dx, r = Math.round(py) + dy;
+        if (r < 0 || r >= LROWS || c < 0 || c >= LCOLS) continue;
+        const d = L.dots[r][c];
+        if ((d === '.' || d === 'c') && Math.hypot(c - px, r - py) < 2.1) labyEat(c, r);
       }
     }
 
+    const fast = Math.min(5.1, 3.8 + 0.3 * (g.level - 1));
+    let near = 99;
+    for (const f of L.foes) {
+      if (f.home > 0) { f.home -= dt; continue; }
+      if (L.freeze <= 0) labyMove(f, f.scared ? 2.4 : f.kind === 'costaud' ? fast * 0.85 : fast, dt, labyFoeChoice);
+      const [fx, fy] = labyPos(f);
+      const d = Math.hypot(fx - px, fy - py);
+      if (!f.scared) near = Math.min(near, d);
+      if (d > 0.62) continue;
+      const [sx, sy] = labyPx(fx, fy);
+      if (f.scared) labyCrunch(f, sx, sy);
+      else if (g.invul <= 0 && L.freeze <= 0) {
+        shakeT = 0.3;
+        L.dying = 0.8;
+        tone(300, 0.6, 'sawtooth', 0.1, -230);
+        buzz(140);
+        return;
+      }
+    }
+    // Un poursuivant tout proche : battement d'alerte
+    L.near = near < 2.6;
+    if (L.near) {
+      L.beat -= dt;
+      if (L.beat <= 0) { tone(95, 0.09, 'sine', 0.09); L.beat = 0.45; }
+    }
+
     if (L.left <= 0) {
-      g.level++;
-      g.score += 100 * (g.level - 1);
-      banner('Niveau ' + g.level + ' !', '#ffe27a');
+      L.clearing = 1;
       jingle([523, 659, 784, 1047], 90);
-      labyFill();
-      labyPlace();
-      g.invul = 1;
+    }
+  }
+
+  // Petits dessins des objets spéciaux, centrés en (0,0), pour une case de taille s
+  function drawLabySpecial(k, s) {
+    const u = s / 40;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (k === 'm') {
+      // Aimant en fer à cheval
+      for (const pass of [1, 0]) {
+        ctx.strokeStyle = pass ? OUT : '#e8322e';
+        ctx.lineWidth = (pass ? 10 : 7) * u;
+        ctx.beginPath(); ctx.moveTo(-8 * u, -9 * u); ctx.lineTo(-8 * u, 1 * u); ctx.arc(0, 1 * u, 8 * u, Math.PI, 0, true); ctx.lineTo(8 * u, -9 * u); ctx.stroke();
+      }
+      ctx.strokeStyle = '#f4f4f4'; ctx.lineWidth = 7 * u; ctx.lineCap = 'butt';
+      ctx.beginPath(); ctx.moveTo(-8 * u, -12 * u); ctx.lineTo(-8 * u, -7 * u); ctx.moveTo(8 * u, -12 * u); ctx.lineTo(8 * u, -7 * u); ctx.stroke();
+    } else if (k === 'e') {
+      // Éclair
+      const path = () => { ctx.beginPath(); ctx.moveTo(4 * u, -14 * u); ctx.lineTo(-9 * u, 2 * u); ctx.lineTo(-1 * u, 2 * u); ctx.lineTo(-5 * u, 14 * u); ctx.lineTo(9 * u, -3 * u); ctx.lineTo(1 * u, -3 * u); ctx.closePath(); };
+      ctx.strokeStyle = OUT; ctx.lineWidth = 4 * u; path(); ctx.stroke();
+      ctx.fillStyle = '#ffd93b'; path(); ctx.fill();
+    } else {
+      // Glaçon
+      ctx.fillStyle = OUT; rr(ctx, -11.5 * u, -11.5 * u, 23 * u, 23 * u, 5 * u); ctx.fill();
+      ctx.fillStyle = '#bfe9ff'; rr(ctx, -10 * u, -10 * u, 20 * u, 20 * u, 4 * u); ctx.fill();
+      ctx.fillStyle = '#7fc8f5'; rr(ctx, -10 * u, 2 * u, 20 * u, 8 * u, 4 * u); ctx.fill();
+      ctx.fillStyle = '#fff'; star(ctx, -3 * u, -3 * u, 5 * u);
     }
   }
 
   function drawLaby() {
     const L = g.laby, G = labyGeom(), s = G.cell;
     ctx.fillStyle = 'rgba(0,0,0,.42)'; rr(ctx, G.x0 - 5, G.y0 - 5, G.w + 10, G.h + 10, 12); ctx.fill();
+
+    // Murs : dessinés d'un seul tenant, avec leur contour ; ils clignotent quand le dédale est vidé
+    const blink = L.clearing > 0 && Math.floor(L.clearing * 8) % 2 === 0;
+    for (const pass of [0, 1]) {
+      ctx.fillStyle = pass ? (blink ? '#fff4d6' : th.machine) : OUT;
+      const inset = pass ? 3.5 : 1.5;
+      for (let r = 0; r < LROWS; r++) {
+        for (let c = 0; c < LCOLS; c++) {
+          if (!labyWall(c, r)) continue;
+          const x = G.x0 + c * s, y = G.y0 + r * s;
+          rr(ctx, x + inset, y + inset, s - 2 * inset, s - 2 * inset, s * 0.26); ctx.fill();
+          if (labyWall(c + 1, r)) ctx.fillRect(x + s / 2, y + inset, s, s - 2 * inset);
+          if (labyWall(c, r + 1)) ctx.fillRect(x + inset, y + s / 2, s - 2 * inset, s);
+        }
+      }
+    }
+    ctx.fillStyle = 'rgba(255,255,255,.2)';
     for (let r = 0; r < LROWS; r++) {
       for (let c = 0; c < LCOLS; c++) {
-        const x = G.x0 + c * s, y = G.y0 + r * s;
-        if (LABY_MAP[r][c] === '#') {
-          ctx.fillStyle = OUT; rr(ctx, x + 0.5, y + 0.5, s - 1, s - 1, s * 0.28); ctx.fill();
-          ctx.fillStyle = th.machine; rr(ctx, x + 2, y + 2, s - 4, s - 4, s * 0.24); ctx.fill();
-          ctx.fillStyle = th.machineDark; rr(ctx, x + 2, y + s * 0.62, s - 4, s * 0.38 - 2, s * 0.2); ctx.fill();
-          ctx.fillStyle = 'rgba(255,255,255,.24)'; rr(ctx, x + 5, y + 4.5, s - 10, s * 0.16, s * 0.08); ctx.fill();
-          continue;
-        }
+        if (labyWall(c, r) && !labyWall(c, r - 1)) { rr(ctx, G.x0 + c * s + 6, G.y0 + r * s + 5.5, s - 12, s * 0.13, s * 0.06); ctx.fill(); }
+      }
+    }
+
+    for (let r = 0; r < LROWS; r++) {
+      for (let c = 0; c < LCOLS; c++) {
         const d = L.dots[r][c];
         if (!d) continue;
         ctx.save();
-        ctx.translate(x + s / 2, y + s / 2);
+        ctx.translate(G.x0 + (c + 0.5) * s, G.y0 + (r + 0.5) * s);
         if (d === 'o') {
           const k = (s / 46) * (1 + 0.1 * Math.sin(machine.t * 6));
           ctx.scale(k, k);
           drawItem(ctx, 'bonbon', { t: machine.t, seed: c + r, face: th.faces });
+        } else if (LABY_SPECIAL[d]) {
+          ctx.translate(0, Math.sin(machine.t * 4 + c) * 2);
+          ctx.fillStyle = 'rgba(159,232,255,' + (0.2 + 0.12 * Math.sin(machine.t * 6)) + ')';
+          circ(ctx, 0, 0, s * 0.46);
+          drawLabySpecial(d, s);
         } else {
-          ctx.scale(s / 78, s / 78);
-          drawItem(ctx, 'pop', { t: 0, seed: 0, face: false });
+          const k = d === 'c' ? s / 62 : s / 78;
+          ctx.scale(k, k);
+          drawItem(ctx, d === 'c' ? 'caramel' : 'pop', { t: 0, seed: 0, face: false });
         }
         ctx.restore();
       }
     }
-    const at = (cx, cy) => [G.x0 + (cx + 0.5) * s, G.y0 + (cy + 0.5) * s];
+    // Petit éclat à l'endroit où un objet vient d'être ramassé
+    for (const o of L.pops) {
+      const k = o.t / 0.25;
+      ctx.strokeStyle = 'rgba(255,250,235,' + (1 - k) + ')';
+      ctx.lineWidth = 2.5 * (1 - k);
+      ctx.beginPath(); ctx.arc(o.x, o.y, (o.big ? 8 : 4) + k * (o.big ? 18 : 10), 0, TAU); ctx.stroke();
+    }
     if (L.bonus) {
-      const [bx, by] = at(L.bonus.c, L.bonus.r);
+      const [bx, by] = labyPx(L.bonus.c, L.bonus.r);
       ctx.save();
       ctx.translate(bx, by - 3);
       ctx.rotate(Math.sin(machine.t * 5) * 0.2);
@@ -2169,10 +2370,11 @@
       drawItem(ctx, 'sucette', { t: machine.t, seed: 0 });
       ctx.restore();
     }
+
     for (const f of L.foes) {
-      const [fx, fy] = at(...labyPos(f));
+      const [fx, fy] = labyPx(...labyPos(f));
       ctx.save();
-      ctx.translate(fx, fy + Math.sin(machine.t * 7 + fx) * 1.5);
+      ctx.translate(fx, fy + (L.freeze > 0 ? 0 : Math.sin(machine.t * 7 + fx) * 1.5));
       // Pendant le festin, les poursuivants blanchissent ; ils clignotent quand il se termine
       const pale = f.scared && (L.fright > 1.5 || Math.floor(machine.t * 8) % 2 === 0);
       if (pale) {
@@ -2184,17 +2386,87 @@
         ctx.strokeStyle = '#5a6f9a'; ctx.lineWidth = 1.3; ctx.lineCap = 'round';
         ctx.beginPath(); ctx.moveTo(-4, 5); ctx.lineTo(-2, 3.5); ctx.lineTo(0, 5); ctx.lineTo(2, 3.5); ctx.lineTo(4, 5); ctx.stroke();
       } else {
-        if (f.home > 0) ctx.globalAlpha = 0.55;
+        if (f.home > 0) {
+          // Au repaire : un anneau se referme jusqu'à sa sortie
+          ctx.strokeStyle = 'rgba(255,255,255,.55)';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath(); ctx.arc(0, 0, s * 0.48, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(f.home / 3, 0, 1)); ctx.stroke();
+          ctx.globalAlpha = 0.55;
+        }
         ctx.scale(s / 46, s / 46);
         drawFoe(ctx, f.kind, { hp: 2, hit: 0, t: machine.t });
+        if (L.freeze > 0 && f.home <= 0) { ctx.fillStyle = 'rgba(150,215,255,.5)'; circ(ctx, 0, -1, 20); }
       }
       ctx.restore();
     }
-    const [px, py] = at(...labyPos(L.p));
+
+    // Disparitions des poursuivants croqués
+    for (const f of L.fx) {
+      const p = clamp(f.t / f.dur, 0, 1);
+      ctx.save();
+      if (f.type === 'transforme') {
+        // Il se change en bonbon, qui file vers le compteur en haut de l'écran
+        const m = Math.min(1, p / 0.35), fly = Math.max(0, (p - 0.35) / 0.65);
+        const e = fly * fly;
+        ctx.translate(f.x + (70 - f.x) * e, f.y + (40 - f.y) * e);
+        if (m < 1) {
+          ctx.save(); ctx.rotate(m * 5); ctx.scale((1 - m) * s / 46, (1 - m) * s / 46);
+          drawFoe(ctx, f.kind, { hp: 2, hit: m, t: machine.t });
+          ctx.restore();
+        }
+        const k = m * (s / 40) * (1 - fly * 0.4);
+        ctx.rotate(fly * 6);
+        ctx.scale(k, k);
+        drawItem(ctx, 'bonbon', { t: machine.t, seed: f.x % 5, face: th.faces });
+      } else if (f.type === 'evapore') {
+        ctx.translate(f.x, f.y);
+        ctx.globalAlpha = 1 - p;
+        const k = (s / 36) * (1 + p * 0.7);
+        ctx.scale(k, k);
+        drawItem(ctx, 'pop', { t: 0, seed: 0, face: false });
+        ctx.fillStyle = 'rgba(255,255,255,.7)';
+        circ(ctx, -9 + Math.sin(f.t * 9) * 4, -16 - p * 14, 4 + p * 4);
+        circ(ctx, 8 + Math.cos(f.t * 8) * 4, -20 - p * 18, 3 + p * 4);
+      } else if (f.type === 'tombe') {
+        ctx.translate(f.x, f.y);
+        ctx.globalAlpha = p > 0.7 ? (1 - p) / 0.3 : 1;
+        ctx.rotate(f.rot);
+        ctx.scale(s / 46, s / 46);
+        drawFoe(ctx, f.kind, { hp: 2, hit: 0, t: machine.t });
+      } else {
+        ctx.translate(f.x, f.y);
+        ctx.globalAlpha = 1 - p;
+        ctx.fillStyle = f.kind === 'braise' ? '#ffd27a' : '#ffffff';
+        circ(ctx, 0, 0, 10 + p * 28);
+      }
+      ctx.restore();
+    }
+
+    // Avatar : flèche de la direction demandée, halo des bonus, tournoiement quand il est touché
+    const [px, py] = labyPx(...labyPos(L.p));
     ctx.save();
-    if (g.invul > 0 && Math.floor(machine.t * 14) % 2) ctx.globalAlpha = 0.35;
-    drawAvatar(ctx, save.avatar, px, py, s * 0.4, g.hurt > 0 ? 'sad' : L.fright > 0 ? 'happy' : '');
+    ctx.translate(px, py);
+    if (L.magnet > 0) { ctx.strokeStyle = 'rgba(159,232,255,' + (0.3 + 0.2 * Math.sin(machine.t * 10)) + ')'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(0, 0, s * 2.1, 0, TAU); ctx.stroke(); }
+    if (L.boost > 0) { ctx.fillStyle = 'rgba(255,217,59,.3)'; circ(ctx, 0, 0, s * 0.58); }
+    if (L.dying > 0) {
+      const k = L.dying / 0.8;
+      ctx.rotate((1 - k) * 12);
+      ctx.scale(k, k);
+    } else if (g.invul > 0 && Math.floor(machine.t * 14) % 2) ctx.globalAlpha = 0.35;
+    drawAvatar(ctx, save.avatar, 0, 0, s * 0.4, L.dying > 0 || L.near ? 'sad' : L.fright > 0 ? 'happy' : '');
+    if (L.want >= 0 && L.dying <= 0) {
+      const [dx, dy] = LABY_DIRS[L.want];
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(dx * s * 0.66, dy * s * 0.66);
+      ctx.lineTo(dx * s * 0.48 + dy * s * 0.13, dy * s * 0.48 + dx * s * 0.13);
+      ctx.lineTo(dx * s * 0.48 - dy * s * 0.13, dy * s * 0.48 - dx * s * 0.13);
+      ctx.closePath(); ctx.fill();
+    }
     ctx.restore();
+
+    if (L.ready > 0 && L.dying <= 0 && L.clearing <= 0) bigText('Prêt ?', W / 2, G.y0 + G.h * 0.62, 26, '#fff4d6', clamp(L.ready * 3, 0, 1));
   }
 
   // Pavé directionnel de la zone de commande : il montre la direction demandée
@@ -2202,24 +2474,24 @@
     const gy = groundY(), y = ctrlY(), x = W / 2;
     ctx.fillStyle = 'rgba(0,0,0,.30)';
     ctx.fillRect(0, gy + 14, W, H - gy - 14);
-    ctx.fillStyle = OUT; circ(ctx, x, y, 36);
-    ctx.fillStyle = th.trim; circ(ctx, x, y, 34);
-    ctx.fillStyle = th.machine; circ(ctx, x, y, 29);
+    ctx.fillStyle = OUT; circ(ctx, x, y, 38);
+    ctx.fillStyle = th.trim; circ(ctx, x, y, 36);
+    ctx.fillStyle = th.machine; circ(ctx, x, y, 31);
     for (let d = 0; d < 4; d++) {
       const [dx, dy] = LABY_DIRS[d];
       ctx.fillStyle = g.laby.want === d ? '#ffffff' : 'rgba(255,255,255,.4)';
       ctx.beginPath();
-      ctx.moveTo(x + dx * 24, y + dy * 24);
-      ctx.lineTo(x + dx * 11 + dy * 8, y + dy * 11 + dx * 8);
-      ctx.lineTo(x + dx * 11 - dy * 8, y + dy * 11 - dx * 8);
+      ctx.moveTo(x + dx * 26, y + dy * 26);
+      ctx.lineTo(x + dx * 12 + dy * 9, y + dy * 12 + dx * 9);
+      ctx.lineTo(x + dx * 12 - dy * 9, y + dy * 12 - dx * 9);
       ctx.closePath(); ctx.fill();
     }
     ctx.fillStyle = '#fff4d6';
     ctx.font = '800 12px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('Glisse', x - 82, y);
-    ctx.fillText('partout', x + 84, y);
+    ctx.fillText('Glisse', x - 86, y);
+    ctx.fillText('partout', x + 88, y);
   }
 
   // Direction donnée par un glissement n'importe où sur l'écran, ou par un appui sur une flèche du pavé
@@ -2229,7 +2501,7 @@
       labyTouch = { id: e.pointerId, x: e.clientX, y: e.clientY };
       if (e.type === 'pointerdown') {
         const dx = (e.clientX - r.left) / scale - W / 2, dy = (e.clientY - r.top) / scale - ctrlY();
-        if (Math.hypot(dx, dy) < 40 && Math.hypot(dx, dy) > 7) g.laby.want = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
+        if (Math.hypot(dx, dy) < 42 && Math.hypot(dx, dy) > 7) g.laby.want = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
       }
       return;
     }
@@ -2239,6 +2511,268 @@
     g.laby.want = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0);
     labyTouch.x = e.clientX;
     labyTouch.y = e.clientY;
+  }
+
+  // ---------- Mode Attrape-tout ----------
+  // Les friandises sont lancées en l'air par vagues. On glisse le doigt dessus pour les attraper :
+  // elles filent alors dans le seau. Il faut tout attraper, et ne pas toucher les grains brûlés.
+  const RAF = {
+    pop: { pts: 1, cur: 'pop', s: 1.6 }, caramel: { pts: 3, cur: 'pop', s: 1.6 },
+    bonbon: { pts: 5, cur: 'candy', s: 1.4 }, sucette: { pts: 10, cur: 'candy', s: 1.5 },
+    arc: { pts: 5, cur: 'pop', s: 1.65 }, gel: { pts: 5, cur: 'pop', s: 1.5 }, brule: { pts: 0, s: 1.6 },
+  };
+  const rafGrav = () => (groundY() - 60) * 1.05 * (1 + 0.05 * Math.min(g.level - 1, 8));
+
+  // Bonus ou compteur de ratés, pour l'affichage en haut de l'écran
+  function rafPower() {
+    const R = g.raf;
+    if (R.frenzy > 0) return { txt: 'Frénésie ' + Math.ceil(R.frenzy), t: R.frenzy * 1.6 };
+    if (R.slow > 0) return { txt: 'Ralenti ' + Math.ceil(R.slow), t: R.slow * 2 };
+    return { txt: g.miss > 0 ? 'Ratés ' + g.miss + '/' + MISS_MAX : '', t: 0 };
+  }
+
+  // Lance un objet depuis le bas de l'écran ; il retombe à un autre endroit
+  function rafLaunch(type, wave, delay) {
+    const grav = rafGrav();
+    const peak = (groundY() - 60) * (0.5 + Math.random() * 0.38);
+    const x = WALL + 40 + Math.random() * (W - 2 * WALL - 80);
+    const tx = WALL + 40 + Math.random() * (W - 2 * WALL - 80);
+    const vy = -Math.sqrt(2 * grav * peak);
+    g.raf.list.push({
+      type, wave, delay, x, y: groundY() + 30, vx: (tx - x) / (2 * -vy / grav), vy,
+      rot: Math.random() * TAU, vr: (Math.random() - 0.5) * 6, seed: Math.random() * 360,
+    });
+  }
+
+  function rafWave() {
+    const R = g.raf;
+    const n = 1 + Math.floor(Math.random() * Math.min(5, 1.6 + g.level * 0.7));
+    const wave = { left: 0, total: 0, ok: true };
+    const burnt = Math.min(0.3, 0.1 + 0.03 * g.level);
+    for (let i = 0; i < n; i++) {
+      const r = Math.random();
+      let type = 'pop';
+      if (r < burnt) type = 'brule';
+      else {
+        const q = (r - burnt) / (1 - burnt);
+        type = q < 0.03 ? 'arc' : q < 0.055 ? 'gel' : q < 0.11 ? 'sucette' : q < 0.3 ? 'bonbon' : q < 0.48 ? 'caramel' : 'pop';
+      }
+      if (type !== 'brule') { wave.left++; wave.total++; }
+      rafLaunch(type, wave, i * 0.13);
+    }
+    // Jamais une vague faite uniquement de grains brûlés
+    if (!wave.total) { wave.left = wave.total = 1; rafLaunch('pop', wave, n * 0.13); }
+    popSound(0.12);
+  }
+
+  function rafCatch(it, i) {
+    const R = g.raf;
+    R.list.splice(i, 1);
+    if (it.type === 'brule') {
+      // Il ne fallait pas le toucher
+      R.chain = 0;
+      g.n.brule++;
+      burst(it.x, it.y, '#6b5a55', 14);
+      ring(it.x, it.y, '#ff8a3d');
+      shakeT = 0.35;
+      slowT = 0.25;
+      loseLife(it.x, it.y - 16, '−1 ❤');
+      return;
+    }
+    const T = RAF[it.type];
+    g.score += T.pts;
+    g.got[T.cur]++;
+    if (it.type === 'sucette') g.n.sucette++;
+    floatText('+' + T.pts, it.x, it.y - 18, T.cur === 'candy' ? '#ffb3da' : '#fff4d6');
+    burst(it.x, it.y, T.cur === 'candy' ? '#ffb3da' : '#fff4d6', 5, T.cur === 'candy');
+    R.fx.push({ type: it.type, x: it.x, y: it.y, t: 0, dur: 0.42, seed: it.seed, s: T.s });
+    buzz(10);
+
+    // Plusieurs prises dans le même geste : bonus
+    R.chain = R.chainT > 0 ? R.chain + 1 : 1;
+    R.chainT = 0.55;
+    tone(520 + Math.min(R.chain, 12) * 45, 0.06, 'triangle', 0.1);
+    if (R.chain >= 3) {
+      // Bonus plafonné, pour qu'une longue série (pendant une frénésie) ne fasse pas exploser le score
+      const bonus = Math.min(R.chain, 6) * 2;
+      g.score += bonus;
+      if (R.chain === 3) banner('Trio ! +' + bonus, '#ffd257');
+      else if (R.chain % 5 === 0) banner('Combo x' + R.chain + ' !', '#ffd257');
+    }
+    if (it.type === 'arc') { R.frenzy = 5; R.frenzyT = 0; banner('Frénésie !', '#9fe8ff'); jingle([660, 880, 1100, 1320], 60); }
+    else if (it.type === 'gel') { R.slow = 4; banner('Ralenti !', '#9fe8ff'); jingle([784, 659, 523], 80); }
+
+    // Toute une vague attrapée sans rien laisser tomber
+    if (it.wave) {
+      it.wave.left--;
+      if (it.wave.left === 0 && it.wave.ok && it.wave.total >= 2) {
+        const bonus = 5 * it.wave.total;
+        g.score += bonus;
+        if (it.wave.total >= 3) g.got.candy++;
+        floatText('Tout attrapé ! +' + bonus, W / 2, 96, '#9fe8ff');
+        jingle([784, 1047], 70);
+      }
+    }
+    if (!g.recordShown && save.best.rafle > 0 && g.score > save.best.rafle) {
+      g.recordShown = true;
+      banner('Nouveau record !', '#ffe27a');
+    }
+  }
+
+  // Attrape tout ce que le doigt a croisé entre deux positions
+  function rafSweep(x0, y0, x1, y1) {
+    const R = g.raf;
+    const dx = x1 - x0, dy = y1 - y0, len2 = dx * dx + dy * dy;
+    for (let i = R.list.length - 1; i >= 0; i--) {
+      const it = R.list[i];
+      if (it.delay > 0) continue;
+      const k = len2 ? clamp(((it.x - x0) * dx + (it.y - y0) * dy) / len2, 0, 1) : 0;
+      const reach = 13 * RAF[it.type].s + (it.type === 'brule' ? 4 : 14);     // plus indulgent pour les friandises
+      if (Math.hypot(it.x - (x0 + dx * k), it.y - (y0 + dy * k)) > reach) continue;
+      rafCatch(it, i);
+      if (state !== 'play') return;
+    }
+  }
+
+  function rafUpdate(dt) {
+    const R = g.raf;
+    player.tx = W / 2;                       // l'avatar reste au centre, son seau reçoit les prises
+    R.frenzy = Math.max(0, R.frenzy - dt);
+    R.slow = Math.max(0, R.slow - dt);
+    R.chainT -= dt;
+    if (R.chainT <= 0) R.chain = 0;
+    const d = dt * (R.slow > 0 ? 0.45 : 1);
+
+    const lvl = 1 + Math.floor(g.time / 20);
+    if (lvl > g.level) { g.level = lvl; banner('Niveau ' + lvl + ' !', '#ffe27a'); jingle([523, 659, 784], 90); }
+
+    if (R.frenzy > 0) {
+      // Pluie de friandises, sans grain brûlé, et sans pénalité si on en rate
+      R.frenzyT -= dt;
+      if (R.frenzyT <= 0) {
+        const r = Math.random();
+        rafLaunch(r < 0.55 ? 'pop' : r < 0.78 ? 'caramel' : r < 0.95 ? 'bonbon' : 'sucette', null, 0);
+        R.frenzyT = 0.2;
+      }
+    } else {
+      R.waveT -= d;
+      if (R.waveT <= 0) {
+        rafWave();
+        R.waveT = Math.max(1.1, 2.5 - 0.13 * g.level) * (0.85 + Math.random() * 0.3);
+      }
+    }
+
+    const grav = rafGrav();
+    const gy = groundY();
+    for (let i = R.list.length - 1; i >= 0; i--) {
+      const it = R.list[i];
+      if (it.delay > 0) { it.delay -= d; continue; }
+      it.vy += grav * d;
+      it.x += it.vx * d;
+      it.y += it.vy * d;
+      it.rot += it.vr * d;
+      if (it.x < WALL + 20) { it.x = WALL + 20; it.vx = Math.abs(it.vx); }
+      if (it.x > W - WALL - 20) { it.x = W - WALL - 20; it.vx = -Math.abs(it.vx); }
+      if (it.vy > 0 && it.y > gy + 34) {
+        R.list.splice(i, 1);
+        if (it.type === 'brule' || !it.wave) continue;       // un grain brûlé qui retombe, c'est tant mieux
+        it.wave.ok = false;
+        floatText('Raté', it.x, gy - 24, '#ffb37a');
+        tone(180, 0.12, 'square', 0.05);
+        g.miss++;
+        if (g.miss >= MISS_MAX) {
+          g.miss = 0;
+          loseLife(it.x, gy - 50, MISS_MAX + ' ratés : −1 ❤');
+          if (state !== 'play') return;
+        }
+      }
+    }
+
+    for (let i = R.fx.length - 1; i >= 0; i--) {
+      const f = R.fx[i];
+      f.t += dt;
+      if (f.t < f.dur) continue;
+      R.fx.splice(i, 1);
+      player.bounce = 0.25;
+    }
+    while (R.trail.length && machine.t - R.trail[0].t > 0.32) R.trail.shift();
+  }
+
+  function drawRafItem(type, seed) {
+    if (type === 'gel') drawLabySpecial('g', 34);
+    else drawItem(ctx, type, { t: machine.t, seed, face: th.faces });
+  }
+
+  function drawRafle() {
+    const R = g.raf;
+    const gy = groundY();
+
+    // Zone de commande : rappel de la règle
+    ctx.fillStyle = 'rgba(0,0,0,.30)';
+    ctx.fillRect(0, gy + 14, W, H - gy - 14);
+    ctx.fillStyle = '#fff4d6';
+    ctx.font = '800 ' + Math.min(14, W / 30) + 'px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Glisse le doigt sur les friandises', W / 2, ctrlY() - 10);
+    ctx.fillStyle = '#ffb37a';
+    ctx.fillText('Ne touche pas les grains brûlés', W / 2, ctrlY() + 12);
+
+    for (const it of R.list) {
+      if (it.delay > 0) continue;
+      const s = RAF[it.type].s;
+      ctx.save();
+      ctx.translate(it.x, it.y);
+      ctx.rotate(th.faces ? Math.sin(it.rot) * 0.35 : it.rot);
+      ctx.scale(s, s);
+      drawRafItem(it.type, it.seed);
+      ctx.restore();
+    }
+
+    // Les prises filent dans le seau en décrivant une courbe
+    const bx = player.x, by = rimY();
+    for (const f of R.fx) {
+      const p = clamp(f.t / f.dur, 0, 1), e = p * p;
+      ctx.save();
+      ctx.translate(f.x + (bx - f.x) * e, f.y + (by - f.y) * e - Math.sin(p * Math.PI) * 50);
+      ctx.rotate(p * 7);
+      const k = f.s * (1 - p * 0.45);
+      ctx.scale(k, k);
+      drawRafItem(f.type, f.seed);
+      ctx.restore();
+    }
+
+    // Traînée du doigt
+    ctx.lineCap = 'round';
+    for (let i = 1; i < R.trail.length; i++) {
+      const a = R.trail[i - 1], b = R.trail[i];
+      if (b.brk) continue;
+      const age = clamp((machine.t - b.t) / 0.32, 0, 1);
+      ctx.strokeStyle = 'rgba(255,236,170,' + (0.75 * (1 - age)) + ')';
+      ctx.lineWidth = 3 + 13 * (1 - age);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.9 * (1 - age)) + ')';
+      ctx.lineWidth = 1.5 + 4 * (1 - age);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
+    if (R.slow > 0) { ctx.fillStyle = 'rgba(150,215,255,.10)'; ctx.fillRect(0, 0, W, gy); }
+  }
+
+  function rafPointer(e) {
+    if (state !== 'play') return;
+    const R = g.raf;
+    if (e.pointerType === 'mouse' && e.type !== 'pointerdown' && e.buttons === 0) { R.last = null; return; }
+    const r = canvas.getBoundingClientRect();
+    const x = (e.clientX - r.left) / scale, y = (e.clientY - r.top) / scale;
+    const fresh = e.type === 'pointerdown' || !R.last || R.last.id !== e.pointerId;
+    const from = fresh ? { x, y } : R.last;
+    R.last = { x, y, id: e.pointerId };
+    R.trail.push({ x, y, t: machine.t, brk: fresh });
+    if (R.trail.length > 28) R.trail.shift();
+    rafSweep(from.x, from.y, x, y);
+  }
+  function rafPointerUp(e) {
+    if (g && g.raf && g.raf.last && g.raf.last.id === e.pointerId) g.raf.last = null;
   }
 
   // ---------- Tutoriel jouable ----------
@@ -2331,6 +2865,7 @@
       else if (mode === 'invasion') invUpdate(dt);
       else if (mode === 'empile') empUpdate(dt);
       else if (mode === 'laby') labyUpdate(dt);
+      else if (mode === 'rafle') rafUpdate(dt);
       else if (g.event) {
         if (g.event.warn > 0) g.event.warn -= dt; else g.event.t -= dt;
         if (g.event.type === 'chauffe') machine.shake = 0.1;
@@ -2341,7 +2876,7 @@
       }
 
       g.spawn -= dt;
-      if (mode !== 'tuto' && mode !== 'brique' && mode !== 'invasion' && mode !== 'empile' && mode !== 'laby' && g.spawn <= 0) {
+      if (mode !== 'tuto' && mode !== 'brique' && mode !== 'invasion' && mode !== 'empile' && mode !== 'laby' && mode !== 'rafle' && g.spawn <= 0) {
         const dd = Math.min(d, 1);
         const rain = evOn('pluie');
         spawn(pickType(d));
@@ -2814,9 +3349,11 @@
     const invOn = !!(g && mode === 'invasion' && inGame() && g.inv);
     const empOn = !!(g && mode === 'empile' && inGame() && g.emp);
     const labyOn = !!(g && mode === 'laby' && inGame() && g.laby);
-    if (bricksOn) drawBricks(); else if (invOn) drawInvaders(); else if (empOn) drawBoard(); else if (labyOn) drawLaby(); else drawMachine();
+    const rafOn = !!(g && mode === 'rafle' && inGame() && g.raf);
+    if (bricksOn) drawBricks(); else if (invOn) drawInvaders(); else if (empOn) drawBoard(); else if (labyOn) drawLaby(); else if (!rafOn) drawMachine();
     if (inGame()) {
       if (labyOn) drawLabyPad();
+      else if (rafOn) { drawPlayer(); drawRafle(); }
       else {
         if (!empOn) drawPlayer();
         drawControl();
@@ -2845,7 +3382,7 @@
         const n = Math.max(1, Math.ceil(g.count));
         const f = g.count - Math.floor(g.count);
         bigText(String(n), W / 2, H * 0.48, 110 + f * 40, '#fff4d6', 1);
-        bigText(mode === 'brique' ? 'Renvoie le grain avec ton seau' : mode === 'invasion' ? 'Vise avec la poignée, esquive les braises' : mode === 'empile' ? 'Glisse la poignée sous la colonne voulue' : mode === 'laby' ? 'Glisse le doigt dans la direction voulue' : 'Glisse la poignée sous ton personnage', W / 2, H * 0.48 + 110, Math.min(18, W / 22), '#fff4d6', 1);
+        bigText(mode === 'brique' ? 'Renvoie le grain avec ton seau' : mode === 'invasion' ? 'Vise avec la poignée, esquive les braises' : mode === 'empile' ? 'Glisse la poignée sous la colonne voulue' : mode === 'laby' ? 'Glisse le doigt dans la direction voulue' : mode === 'rafle' ? 'Glisse le doigt sur les friandises' : 'Glisse la poignée sous ton personnage', W / 2, H * 0.48 + 110, Math.min(18, W / 22), '#fff4d6', 1);
       }
       if (g.banner) {
         const a = clamp(g.banner.t * 2, 0, 1);
@@ -2883,7 +3420,7 @@
     setText('status', mode === 'chrono' ? '⏱ ' + Math.ceil(g.left) : mode === 'tuto' ? 'Tutoriel' : mode === 'empile' ? 'Lignes ' + g.emp.lines : '❤'.repeat(Math.max(0, g.lives)));
     setBar('comboBar', mult >= 5 ? 100 : Math.round((g.combo % COMBO_STEP) / COMBO_STEP * 100));
     setClass('comboWrap', 'max', mult >= 5);
-    const power = Math.max(g.giant, g.magnet, g.rapid || 0, g.fire || 0, mode === 'laby' ? g.laby.fright : 0);
+    const power = Math.max(g.giant, g.magnet, g.rapid || 0, g.fire || 0, mode === 'laby' ? labyPower().t : mode === 'rafle' ? rafPower().t : 0);
     setClass('powerWrap', 'hidden', power <= 0);
     setBar('powerBar', Math.round(power / 8 * 100));
     let pw = '';
@@ -2891,7 +3428,8 @@
     else if (g.magnet > 0) pw = 'Aimant ' + Math.ceil(g.magnet);
     else if (g.rapid > 0) pw = 'Tir rapide ' + Math.ceil(g.rapid);
     else if (g.fire > 0) pw = 'Grain de feu ' + Math.ceil(g.fire);
-    else if (mode === 'laby' && g.laby.fright > 0) pw = 'Festin ' + Math.ceil(g.laby.fright);
+    else if (mode === 'laby') pw = labyPower().txt;
+    else if (mode === 'rafle') pw = rafPower().txt;
     else if (mode === 'survie' && g.miss > 0) pw = 'Ratés ' + g.miss + '/' + MISS_MAX;
     setText('power', pw);
   }
@@ -2971,7 +3509,7 @@
   function buildMenu() {
     ensureDaily();
     $('#wallet').textContent = walletText();
-    $('#best').textContent = 'Records — Chrono : ' + save.best.chrono + ' · Survie : ' + save.best.survie + ' · Briques : ' + (save.best.brique || 0) + ' · Invasion : ' + (save.best.invasion || 0) + ' · Empilage : ' + (save.best.empile || 0) + ' · Labyrinthe : ' + (save.best.laby || 0);
+    $('#best').textContent = 'Records — Chrono : ' + save.best.chrono + ' · Survie : ' + save.best.survie + ' · Briques : ' + (save.best.brique || 0) + ' · Invasion : ' + (save.best.invasion || 0) + ' · Empilage : ' + (save.best.empile || 0) + ' · Labyrinthe : ' + (save.best.laby || 0) + ' · Attrape-tout : ' + (save.best.rafle || 0);
     $('#btnMusic').textContent = (save.music ? '🎵' : '🔇') + ' Musique';
     $('#btnSfx').textContent = (save.sfx ? '🔊' : '🔇') + ' Bruitages';
     $('#avName').textContent = avatar().name;
@@ -3177,7 +3715,7 @@
   }
 
   // Envoie les records en attente. Sans réseau, ils restent marqués et repartent plus tard.
-  const RANK_MODES = [['chrono', 'Chrono'], ['survie', 'Survie'], ['brique', 'Briques'], ['invasion', 'Invasion'], ['empile', 'Empilage'], ['laby', 'Labyrinthe']];
+  const RANK_MODES = [['chrono', 'Chrono'], ['survie', 'Survie'], ['brique', 'Briques'], ['invasion', 'Invasion'], ['empile', 'Empilage'], ['laby', 'Labyrinthe'], ['rafle', 'Attrape-tout']];
   let syncing = null;
   function trySync() {
     if (syncing) return syncing;
@@ -3304,6 +3842,7 @@
   $('#btnInvasion').addEventListener('click', () => newGame('invasion'));
   $('#btnEmpile').addEventListener('click', () => newGame('empile'));
   $('#btnLaby').addEventListener('click', () => newGame('laby'));
+  $('#btnRafle').addEventListener('click', () => newGame('rafle'));
   $('#btnAgain').addEventListener('click', () => newGame(mode));
   $('#btnMenu').addEventListener('click', goMenu);
   $('#btnPause').addEventListener('click', pause);
@@ -3355,6 +3894,7 @@
     if (state !== 'play' && state !== 'count') { dragId = null; return; }
     if (mode === 'empile' && empPointer(e)) return;
     if (mode === 'laby') { labyPointer(e); return; }
+    if (mode === 'rafle') { rafPointer(e); return; }
     if (e.pointerType === 'mouse') {
       const r = canvas.getBoundingClientRect();
       player.tx = (e.clientX - r.left) / scale;
@@ -3373,7 +3913,7 @@
     else player.tx = clamp(player.tx + (e.clientX - dragX) / scale * DRAG_GAIN, WALL + 30, maxX());
     dragX = e.clientX;
   }
-  const pointerEnd = (e) => { if (e.pointerId === dragId) dragId = null; empPointerUp(e); };
+  const pointerEnd = (e) => { if (e.pointerId === dragId) dragId = null; empPointerUp(e); rafPointerUp(e); };
   canvas.addEventListener('pointerdown', pointer);
   canvas.addEventListener('pointermove', pointer);
   canvas.addEventListener('pointerup', pointerEnd);
