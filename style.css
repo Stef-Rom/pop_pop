@@ -278,6 +278,8 @@ h2.title { margin-top: 0; font-size: 26px; font-weight: 900; color: var(--accent
 .task.me { background: var(--card-sel); outline: 3px solid var(--accent); }
 .task .pos { display: inline-block; min-width: 2.2em; }
 #rankScopes { margin-top: 8px; }
+#rankModes { flex-wrap: wrap; }
+#rankModes .chip { flex: 1 1 30%; }
 
 .legend a { color: inherit; font-weight: 800; }
 .namebox { display: flex; gap: 8px; margin-top: 4px; }

@@ -5,13 +5,18 @@
 -- Une ligne par joueur et par mode : on ne garde que le meilleur score.
 create table if not exists public.scores (
   player_id  uuid        not null,
-  mode       text        not null check (mode in ('chrono', 'survie')),
+  mode       text        not null check (mode in ('chrono', 'survie', 'brique', 'invasion', 'empile')),
   name       text        not null,
   score      integer     not null check (score >= 0),
   grp        text,
   updated_at timestamptz not null default now(),
   primary key (player_id, mode)
 );
+
+-- Mise à niveau d'une table déjà créée : autorise les trois nouveaux modes.
+alter table public.scores drop constraint if exists scores_mode_check;
+alter table public.scores add constraint scores_mode_check
+  check (mode in ('chrono', 'survie', 'brique', 'invasion', 'empile'));
 
 create index if not exists scores_rank_idx on public.scores (mode, score desc);
 create index if not exists scores_grp_idx  on public.scores (grp, mode, score desc);
@@ -40,7 +45,7 @@ begin
   if p_player is null then
     raise exception 'joueur manquant';
   end if;
-  if p_mode is null or p_mode not in ('chrono', 'survie') then
+  if p_mode is null or p_mode not in ('chrono', 'survie', 'brique', 'invasion', 'empile') then
     raise exception 'mode invalide';
   end if;
   -- Le pseudo est composé de mots imposés (mêmes listes que dans game.js) : aucun texte libre.
@@ -50,7 +55,13 @@ begin
     raise exception 'pseudo invalide';
   end if;
   if p_score is null or p_score < 0
-     or p_score > (case p_mode when 'chrono' then 3000 else 30000 end) then
+     or p_score > (case p_mode
+                     when 'chrono'   then 3000
+                     when 'survie'   then 30000
+                     when 'brique'   then 200000
+                     when 'invasion' then 500000
+                     else 1000000            -- empile
+                   end) then
     raise exception 'score invalide';
   end if;
   if v_grp is not null and v_grp !~ '^[A-Z0-9]{3,10}$' then

@@ -114,7 +114,7 @@
     stats: { games: 0, pop: 0, candy: 0, sucette: 0, burnt: 0, combo: 0, level: 1 },
     ach: [], daily: null,
     player: { id: '', name: '', grp: '' },      // profil du classement en ligne
-    dirty: { chrono: false, survie: false },    // records pas encore envoyés
+    dirty: { chrono: false, survie: false, brique: false, invasion: false, empile: false },    // records pas encore envoyés
   };
   try {
     const s = JSON.parse(localStorage.getItem(SAVE_KEY));
@@ -2464,21 +2464,26 @@
   }
 
   // Envoie les records en attente. Sans réseau, ils restent marqués et repartent plus tard.
+  const RANK_MODES = [['chrono', 'Chrono'], ['survie', 'Survie'], ['brique', 'Briques'], ['invasion', 'Invasion'], ['empile', 'Empilage']];
   let syncing = null;
   function trySync() {
     if (syncing) return syncing;
     if (!save.player.name || !save.player.id || !window.Online) return Promise.resolve(false);
     syncing = (async () => {
       try {
-        for (const m of ['chrono', 'survie']) {
+        let ok = true;
+        for (const [m] of RANK_MODES) {
           if (!save.dirty[m] || !(save.best[m] > 0)) continue;
-          await window.Online.submit(save.player, m, save.best[m]);
-          save.dirty[m] = false;
-          persist();
+          // Un échec sur un mode ne doit pas empêcher l'envoi des autres
+          try {
+            await window.Online.submit(save.player, m, save.best[m]);
+            save.dirty[m] = false;
+            persist();
+          } catch (e) {
+            ok = false;
+          }
         }
-        return true;
-      } catch (e) {
-        return false;
+        return ok;
       } finally {
         syncing = null;
       }
@@ -2504,7 +2509,7 @@
   async function loadRank() {
     const token = ++rankToken;
     if (!save.player.grp) rankScope = 'monde';
-    chips($('#rankModes'), [['chrono', 'Chrono'], ['survie', 'Survie']], rankMode, (id) => { rankMode = id; loadRank(); });
+    chips($('#rankModes'), RANK_MODES, rankMode, (id) => { rankMode = id; loadRank(); });
     const scopes = [['monde', 'Monde']];
     if (save.player.grp) scopes.push(['groupe', 'Groupe ' + save.player.grp]);
     chips($('#rankScopes'), scopes, rankScope, (id) => { rankScope = id; loadRank(); });
@@ -2560,8 +2565,7 @@
     if (!save.player.id) save.player.id = newId();
     save.player.name = name;
     save.player.grp = grp;
-    save.dirty.chrono = save.best.chrono > 0;
-    save.dirty.survie = save.best.survie > 0;
+    for (const [m] of RANK_MODES) save.dirty[m] = save.best[m] > 0;
     persist();
     $('#inGrp').value = grp;
     toast('Profil enregistré');
