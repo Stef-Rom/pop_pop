@@ -338,7 +338,7 @@
     }
     if (m === 'empile') {
       const rows = empRows();
-      g.emp = { rows, grid: Array.from({ length: rows }, () => new Array(EMP_COLS).fill(0)), cur: null, next: empNewPiece(), fall: 0, lockT: 0, moveT: 0, spawnT: 0.2, lines: 0, joy: 0, garb: 22 };
+      g.emp = { rows, grid: Array.from({ length: rows }, () => new Array(EMP_COLS).fill(0)), cur: null, queue: [empNewPiece(), empNewPiece()], fx: [], clearRows: [], clearT: 0, streak: 0, flash: null, danger: false, beat: 0, fall: 0, lockT: 0, moveT: 0, spawnT: 0.2, lines: 0, joy: 0, garb: 22 };
     }
     if (m === 'invasion') {
       g.wave = 1;
@@ -1394,10 +1394,11 @@
   }
 
   // ---------- Mode Empilage ----------
-  // Des blocs de friandises tombent dans un plateau. Une rangée complète éclate en pop-corn.
-  // La poignée choisit la colonne ; deux boutons font tourner la pièce et la lâchent.
+  // Des blocs de friandises tombent dans un plateau. Une rangée complète disparaît, chaque sorte de bloc
+  // à sa manière. La poignée, placée sous le plateau, désigne la colonne ; deux boutons tournent et lâchent.
   const EMP_COLS = 8;
-  const EMP_SIDE = 58;            // largeur du panneau latéral (pièce suivante, avatar)
+  const EMP_SIDE = 58;            // largeur de la colonne latérale (pièces suivantes, avatar, boutons)
+  const EMP_CLEAR = 0.46;         // durée de la disparition d'une rangée
   // La première forme est le pop-corn magique, qui fait éclater les blocs autour de lui
   const EMP_SHAPES = [
     [[0, 0]],
@@ -1417,12 +1418,19 @@
     pop: ['#e8455a', '#a81c2f'], caramel: ['#eaa53c', '#b4660f'], rose: ['#ff5aa0', '#c92a72'],
     bleu: ['#49a6ff', '#1f6fd0'], vert: ['#33c57c', '#168a4f'], violet: ['#9a6cff', '#5f38c9'],
     brule: ['#4c3a32', '#231916'], magic: ['#ffffff', '#cccccc'],
+    friandise: ['#3a2430', '#24141c'], petard: ['#d62839', '#8f1626'], arc: ['#ffffff', '#cccccc'],
+  };
+  // Façon de disparaître de chaque sorte de bloc quand sa rangée est complète
+  const EMP_WAYS = {
+    pop: 'collecte', caramel: 'tombe', rose: 'evapore', bleu: 'eclate', vert: 'tombe', violet: 'evapore',
+    friandise: 'collecte', petard: 'eclate', arc: 'evapore', brule: 'tombe', magic: 'eclate',
   };
   const EMP_SWEET = ['rose', 'bleu', 'vert', 'violet'];
   let empGest = null;             // geste en cours dans le plateau (toucher = tourner, glisser vers le bas = lâcher)
 
-  const maxX = () => W - WALL - (g && mode === 'empile' && inGame() ? 150 : 30);
-  const empButtons = () => [{ id: 'rot', x: W - WALL - 92 }, { id: 'drop', x: W - WALL - 34 }];
+  const empActive = () => !!(g && mode === 'empile' && inGame() && g.emp);
+  // En Empilage, la poignée se déplace sous le plateau : son bord droit s'arrête au bord du plateau
+  const maxX = () => (empActive() ? empGeom().x0 + empGeom().w : W - WALL - 30);
 
   function empRows() {
     const room = groundY() - 78;
@@ -1436,14 +1444,29 @@
     const cell = Math.floor(Math.min((W - 2 * WALL - 12 - EMP_SIDE) / EMP_COLS, (gy - 78) / rows, 44));
     const w = cell * EMP_COLS, h = cell * rows;
     const x0 = Math.round((W - w - EMP_SIDE) / 2);
-    return { cell, x0, y0: gy - h - 6, w, h, sx: x0 + w + 10 };
+    const sx = x0 + w + 10;
+    return { cell, x0, y0: gy - h - 6, w, h, sx, mid: sx + (EMP_SIDE - 10) / 2 };
+  }
+
+  // Deux gros boutons dans la colonne de droite, à portée de pouce
+  function empButtons() {
+    const G = empGeom(), gy = groundY();
+    return [{ id: 'rot', x: G.mid, y: gy - 122 }, { id: 'drop', x: G.mid, y: gy - 52 }];
   }
 
   function empNewPiece() {
     const magic = Math.random() < 0.05;
     const idx = magic ? 0 : 1 + Math.floor(Math.random() * (EMP_SHAPES.length - 1));
-    return { cells: EMP_SHAPES[idx].map((c) => c.slice()), kind: magic ? 'magic' : EMP_KINDS[Math.floor(Math.random() * EMP_KINDS.length)], x: 0, y: 0 };
+    const p = { cells: EMP_SHAPES[idx].map((c) => c.slice()), kind: magic ? 'magic' : EMP_KINDS[Math.floor(Math.random() * EMP_KINDS.length)], x: 0, y: 0, special: -1, skind: '' };
+    // Une pièce sur cinq porte un bloc spécial
+    if (!magic && p.cells.length > 1 && Math.random() < 0.2) {
+      const r = Math.random();
+      p.special = Math.floor(Math.random() * p.cells.length);
+      p.skind = r < 0.55 ? 'friandise' : r < 0.82 ? 'petard' : 'arc';
+    }
+    return p;
   }
+  const empCellKind = (p, i) => (i === p.special ? p.skind : p.kind);
   const empWidth = (cells) => 1 + Math.max(...cells.map((c) => c[0]));
   const empInterval = () => Math.max(0.1, 0.75 - 0.07 * (g.level - 1));
 
@@ -1457,17 +1480,16 @@
     return true;
   }
 
-  // Colonne visée par la poignée, pour une pièce donnée
+  // Colonne désignée par la poignée : la pièce se centre au-dessus du doigt
   function empTargetCol(cells) {
-    const lo = WALL + 30;
-    const frac = clamp((player.x - lo) / Math.max(1, maxX() - lo), 0, 1);
-    return Math.round(frac * (EMP_COLS - empWidth(cells)));
+    const G = empGeom(), w = empWidth(cells);
+    return clamp(Math.round((player.x - G.x0) / G.cell - w / 2), 0, EMP_COLS - w);
   }
 
   function empSpawn() {
     const E = g.emp;
-    E.cur = E.next;
-    E.next = empNewPiece();
+    E.cur = E.queue.shift();
+    E.queue.push(empNewPiece());
     E.cur.x = empTargetCol(E.cur.cells);
     E.cur.y = 0;
     E.fall = empInterval();
@@ -1516,9 +1538,23 @@
     empLock();
   }
 
+  // Fait disparaître un bloc du plateau, avec l'animation propre à sa sorte
+  function empVanish(c, r, delay, way) {
+    const E = g.emp, G = empGeom();
+    const kind = E.grid[r][c];
+    if (!kind) return;
+    E.grid[r][c] = 0;
+    const f = { kind, type: way || EMP_WAYS[kind] || 'eclate', x: G.x0 + (c + 0.5) * G.cell, y: G.y0 + (r + 0.5) * G.cell, s: G.cell, t: -delay, dur: 0.34, rot: 0, vx: 0, vy: 0, vr: 0, done: false };
+    if (f.type === 'tombe') { f.dur = 0.9; f.vx = (Math.random() - 0.5) * 90; f.vy = -90; f.vr = (Math.random() < 0.5 ? -1 : 1) * (5 + Math.random() * 5); }
+    else if (f.type === 'evapore') f.dur = 0.6;
+    else if (f.type === 'collecte') f.dur = 0.5;
+    E.fx.push(f);
+  }
+
   function empLock() {
     const E = g.emp, p = E.cur, G = empGeom();
     const center = (c, r) => [G.x0 + (c + 0.5) * G.cell, G.y0 + (r + 0.5) * G.cell];
+    E.flash = { t: 0.14, cells: p.cells.map(([cx, cy]) => [p.x + cx, p.y + cy]) };
     if (p.kind === 'magic') {
       // Le pop-corn magique fait éclater les blocs voisins
       let n = 0;
@@ -1526,48 +1562,65 @@
         for (let dx = -1; dx <= 1; dx++) {
           const X = p.x + dx, Y = p.y + dy;
           if (X < 0 || X >= EMP_COLS || Y < 0 || Y >= E.rows || !E.grid[Y][X]) continue;
-          const [px, py] = center(X, Y);
-          burst(px, py, EMP_COLORS[E.grid[Y][X]][0], 5, true);
-          E.grid[Y][X] = 0;
+          empVanish(X, Y, 0, 'eclate');
           n++;
         }
       }
       const [px, py] = center(p.x, p.y);
       ring(px, py, '#fff');
+      burst(px, py, '#9fe8ff', 12, true);
       g.score += 10 * n * g.level;
       if (n) floatText('+' + 10 * n * g.level, px, py, '#9fe8ff');
       popSound(0.16);
       shakeT = 0.18;
     } else {
-      for (const [cx, cy] of p.cells) if (p.y + cy >= 0) E.grid[p.y + cy][p.x + cx] = p.kind;
+      p.cells.forEach(([cx, cy], i) => { if (p.y + cy >= 0) E.grid[p.y + cy][p.x + cx] = empCellKind(p, i); });
       tone(160, 0.06, 'square', 0.05);
     }
 
-    // Rangées complètes
-    let lines = 0, sweets = 0;
-    for (let r = E.rows - 1; r >= 0; r--) {
-      if (!E.grid[r].every(Boolean)) continue;
-      for (let c = 0; c < EMP_COLS; c++) {
-        const k = E.grid[r][c];
-        if (EMP_SWEET.includes(k)) sweets++;
-        const [px, py] = center(c, r);
-        burst(px, py, EMP_COLORS[k][0], 3, k !== 'pop' && k !== 'brule');
+    // Rangées complètes : elles disparaissent en vague depuis le centre, puis le plateau se tasse
+    const full = [];
+    for (let r = 0; r < E.rows; r++) if (E.grid[r].every(Boolean)) full.push(r);
+    if (full.length) {
+      const lines = full.length;
+      let sweets = 0, treats = 0;
+      const extra = [];
+      for (const r of full) {
+        for (let c = 0; c < EMP_COLS; c++) {
+          const k = E.grid[r][c];
+          if (EMP_SWEET.includes(k)) sweets++;
+          if (k === 'friandise') treats++;
+          if (k === 'petard' || k === 'arc') extra.push([c, r, k]);
+          empVanish(c, r, Math.abs(c - (EMP_COLS - 1) / 2) * 0.035);
+        }
       }
-      E.grid.splice(r, 1);
-      E.grid.unshift(new Array(EMP_COLS).fill(0));
-      lines++;
-      r++;
-    }
-    if (lines) {
-      const pts = [0, 50, 150, 350, 700][Math.min(lines, 4)] * g.level;
-      g.score += pts;
+      // Blocs spéciaux pris dans la rangée
+      let blown = 0;
+      for (const [c, r, k] of extra) {
+        if (k === 'petard') {
+          for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const X = c + dx, Y = r + dy;
+            if (X >= 0 && X < EMP_COLS && Y >= 0 && Y < E.rows && E.grid[Y][X]) { empVanish(X, Y, 0.12, 'eclate'); blown++; }
+          }
+          shakeT = 0.2;
+        } else {
+          for (let Y = 0; Y < E.rows; Y++) if (E.grid[Y][c]) { empVanish(c, Y, 0.1 + Math.abs(Y - r) * 0.02, 'evapore'); blown++; }
+        }
+      }
+      E.clearRows = full;
+      E.clearT = EMP_CLEAR;
+      E.streak++;
+      const base = [0, 50, 150, 350, 700][Math.min(lines, 4)] * g.level;
+      const bonus = (E.streak > 1 ? 25 * (E.streak - 1) : 0) * g.level + 10 * blown * g.level + 20 * treats * g.level;
+      g.score += base + bonus;
       E.lines += lines;
       E.joy = 1.4;
       // Butin : modeste pour une rangée, plus généreux pour plusieurs à la fois
       g.got.pop += lines * 2;
-      g.got.candy += (lines - 1) + (sweets >= 6 ? 1 : 0);
-      floatText('+' + pts, G.x0 + G.w / 2, G.y0 + G.h * 0.45, '#fff4d6');
+      g.got.candy += (lines - 1) + (sweets >= 6 ? 1 : 0) + treats;
+      floatText('+' + (base + bonus), G.x0 + G.w / 2, G.y0 + G.h * 0.45, '#fff4d6');
       if (lines >= 2) banner(['', '', 'Double !', 'Triple !', 'Quadruple !'][Math.min(lines, 4)], '#ffd257');
+      else if (E.streak > 1) banner('Combo x' + E.streak + ' !', '#ffd257');
       jingle([523, 659, 784, 1047].slice(0, lines + 1), 80);
       popSound(0.14);
       buzz(20 * lines);
@@ -1580,6 +1633,8 @@
         g.recordShown = true;
         banner('Nouveau record !', '#ffe27a');
       }
+    } else {
+      E.streak = 0;
     }
     E.cur = null;
     E.spawnT = 0.12;
@@ -1599,8 +1654,49 @@
   }
 
   function empUpdate(dt) {
-    const E = g.emp;
+    const E = g.emp, G = empGeom();
     E.joy = Math.max(0, E.joy - dt);
+    if (E.flash) { E.flash.t -= dt; if (E.flash.t <= 0) E.flash = null; }
+
+    // Animations de disparition
+    for (let i = E.fx.length - 1; i >= 0; i--) {
+      const f = E.fx[i];
+      f.t += dt;
+      if (f.t < 0) continue;
+      if (!f.done) {
+        // Début de l'animation de ce bloc
+        f.done = true;
+        if (f.type === 'eclate') { burst(f.x, f.y, EMP_COLORS[f.kind][0], 4, f.kind !== 'brule'); tone(500 + Math.random() * 300, 0.04, 'triangle', 0.05); }
+        else if (f.type === 'evapore') tone(620, 0.12, 'sine', 0.035, 500);
+      }
+      if (f.type === 'tombe') { f.vy += 900 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt; }
+      else if (f.type === 'evapore') f.y -= 40 * dt;
+      if (f.t >= f.dur) {
+        if (f.type === 'collecte') { burst(G.mid, G.y0 + 150, f.kind === 'pop' ? '#fff4d6' : '#ffb3da', 3, true); tone(900, 0.04, 'triangle', 0.06); }
+        E.fx.splice(i, 1);
+      }
+    }
+
+    // Tassement du plateau une fois les rangées disparues
+    if (E.clearT > 0) {
+      E.clearT -= dt;
+      if (E.clearT > 0) return;
+      const rows = E.clearRows.slice().sort((a, b) => b - a);
+      for (const r of rows) E.grid.splice(r, 1);
+      for (let i = 0; i < rows.length; i++) E.grid.unshift(new Array(EMP_COLS).fill(0));
+      E.clearRows = [];
+      tone(140, 0.07, 'square', 0.05);
+    }
+
+    // Alerte quand la pile approche du haut
+    let top = E.rows;
+    for (let r = 0; r < E.rows && top === E.rows; r++) if (E.grid[r].some(Boolean)) top = r;
+    E.danger = top < 4;
+    if (E.danger) {
+      E.beat -= dt;
+      if (E.beat <= 0) { tone(90, 0.1, 'sine', 0.09); E.beat = 0.7; }
+    }
+
     if (g.level >= 3) {
       E.garb -= dt;
       if (E.garb <= 0) {
@@ -1615,13 +1711,13 @@
       return;
     }
     const p = E.cur;
-    // La pièce glisse vers la colonne visée, une case à la fois, sans traverser les blocs
+    // La pièce glisse vers la colonne désignée, une case à la fois, sans traverser les blocs
     E.moveT -= dt;
     const tc = empTargetCol(p.cells);
     if (tc !== p.x && E.moveT <= 0) {
       const d = tc > p.x ? 1 : -1;
       if (empFits(p.cells, p.x + d, p.y)) { p.x += d; E.lockT = Math.min(E.lockT, 0.2); }
-      E.moveT = 0.035;
+      E.moveT = 0.03;
     }
     if (empFits(p.cells, p.x, p.y + 1)) {
       E.fall -= dt * (keys.down ? 10 : 1);
@@ -1636,20 +1732,21 @@
   function drawEmpCell(x, y, s, kind) {
     const pad = 1.5, w = s - 2 * pad;
     let col = EMP_COLORS[kind] || EMP_COLORS.pop;
-    if (kind === 'magic') {
+    if (kind === 'magic' || kind === 'arc') {
       const h = Math.round((machine.t * 200) % 360);
       col = ['hsl(' + h + ',95%,70%)', 'hsl(' + ((h + 40) % 360) + ',90%,52%)'];
     }
     ctx.fillStyle = OUT; rr(ctx, x + pad - 1.2, y + pad - 1.2, w + 2.4, w + 2.4, s * 0.25); ctx.fill();
     ctx.fillStyle = col[0]; rr(ctx, x + pad, y + pad, w, w, s * 0.22); ctx.fill();
     ctx.fillStyle = col[1]; rr(ctx, x + pad, y + pad + w * 0.7, w, w * 0.3, s * 0.2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.42)'; rr(ctx, x + pad + 3, y + pad + 3, w - 6, w * 0.18, w * 0.09); ctx.fill();
+    if (kind !== 'friandise') { ctx.fillStyle = 'rgba(255,255,255,.42)'; rr(ctx, x + pad + 3, y + pad + 3, w - 6, w * 0.18, w * 0.09); ctx.fill(); }
     const cx = x + s / 2, cy = y + s / 2;
-    if (kind === 'pop' || kind === 'caramel') {
+    if (kind === 'pop' || kind === 'caramel' || kind === 'friandise') {
       ctx.save();
-      ctx.translate(cx, cy + 1);
-      ctx.scale(s / 40, s / 40);
-      drawItem(ctx, kind, { t: 0, seed: 0, face: th.faces });
+      ctx.translate(cx, cy + (kind === 'friandise' ? 0 : 1));
+      const k = kind === 'friandise' ? s / 50 : s / 40;
+      ctx.scale(k, k);
+      drawItem(ctx, kind === 'friandise' ? 'bonbon' : kind, { t: 0, seed: (x + y) % 5, face: th.faces });
       ctx.restore();
     } else if (kind === 'brule') {
       ctx.strokeStyle = '#ff6a2a'; ctx.lineWidth = s * 0.09; ctx.lineCap = 'round';
@@ -1657,55 +1754,133 @@
       ctx.beginPath(); ctx.moveTo(cx - k, cy - k); ctx.lineTo(cx + k, cy + k); ctx.moveTo(cx + k, cy - k); ctx.lineTo(cx - k, cy + k); ctx.stroke();
     } else if (kind === 'magic') {
       ctx.fillStyle = '#fff'; star(ctx, cx, cy, s * 0.28);
+    } else if (kind === 'petard') {
+      ctx.fillStyle = '#ffd257'; star(ctx, cx, cy, s * 0.3);
+      ctx.fillStyle = '#fff'; circ(ctx, cx, cy, s * 0.07);
+    } else if (kind === 'arc') {
+      // Double flèche : ce bloc emporte toute sa colonne
+      ctx.fillStyle = '#fff';
+      const k = s * 0.16;
+      ctx.fillRect(cx - s * 0.035, cy - k, s * 0.07, 2 * k);
+      for (const d of [-1, 1]) { ctx.beginPath(); ctx.moveTo(cx, cy + d * s * 0.32); ctx.lineTo(cx - k * 0.9, cy + d * k * 0.7); ctx.lineTo(cx + k * 0.9, cy + d * k * 0.7); ctx.closePath(); ctx.fill(); }
     }
   }
 
   function drawBoard() {
     const E = g.emp, G = empGeom();
+    const pulse = E.danger ? 0.5 + 0.5 * Math.sin(machine.t * 9) : 0;
     ctx.fillStyle = 'rgba(0,0,0,.42)'; rr(ctx, G.x0 - 6, G.y0 - 6, G.w + 12, G.h + 12, 11); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,.045)';
     for (let r = 0; r < E.rows; r++) for (let c = (r % 2); c < EMP_COLS; c += 2) ctx.fillRect(G.x0 + c * G.cell, G.y0 + r * G.cell, G.cell, G.cell);
-    ctx.strokeStyle = th.trim; ctx.lineWidth = 2.5; rr(ctx, G.x0 - 6, G.y0 - 6, G.w + 12, G.h + 12, 11); ctx.stroke();
+    if (E.danger) { ctx.fillStyle = 'rgba(255,60,60,' + (0.1 + 0.12 * pulse) + ')'; ctx.fillRect(G.x0, G.y0, G.w, G.cell * 4); }
 
-    let top = E.rows;
+    // Couloir de chute : les colonnes que la pièce va occuper
+    if (E.cur) {
+      const ly = empLanding();
+      const done = new Set();
+      ctx.fillStyle = 'rgba(255,255,255,.07)';
+      for (const [cx, cy] of E.cur.cells) {
+        if (done.has(cx)) continue;
+        done.add(cx);
+        const bottom = Math.max(...E.cur.cells.filter((c) => c[0] === cx).map((c) => c[1]));
+        ctx.fillRect(G.x0 + (E.cur.x + cx) * G.cell, G.y0 + (E.cur.y + bottom + 1) * G.cell, G.cell, (ly - E.cur.y) * G.cell);
+      }
+    }
+
     for (let r = 0; r < E.rows; r++) {
       for (let c = 0; c < EMP_COLS; c++) {
-        if (!E.grid[r][c]) continue;
-        top = Math.min(top, r);
-        drawEmpCell(G.x0 + c * G.cell, G.y0 + r * G.cell, G.cell, E.grid[r][c]);
+        if (E.grid[r][c]) drawEmpCell(G.x0 + c * G.cell, G.y0 + r * G.cell, G.cell, E.grid[r][c]);
       }
+    }
+    if (E.flash) {
+      ctx.fillStyle = 'rgba(255,255,255,' + Math.min(0.7, E.flash.t * 6) + ')';
+      for (const [c, r] of E.flash.cells) { rr(ctx, G.x0 + c * G.cell + 1.5, G.y0 + r * G.cell + 1.5, G.cell - 3, G.cell - 3, G.cell * 0.22); ctx.fill(); }
     }
     if (E.cur) {
       // Fantôme : là où la pièce va se poser
       const ly = empLanding();
       if (ly !== E.cur.y) {
-        ctx.strokeStyle = 'rgba(255,255,255,.4)';
+        ctx.strokeStyle = 'rgba(255,255,255,.45)';
         ctx.lineWidth = 2;
         for (const [cx, cy] of E.cur.cells) { rr(ctx, G.x0 + (E.cur.x + cx) * G.cell + 3, G.y0 + (ly + cy) * G.cell + 3, G.cell - 6, G.cell - 6, G.cell * 0.2); ctx.stroke(); }
       }
-      for (const [cx, cy] of E.cur.cells) drawEmpCell(G.x0 + (E.cur.x + cx) * G.cell, G.y0 + (E.cur.y + cy) * G.cell, G.cell, E.cur.kind);
+      E.cur.cells.forEach(([cx, cy], i) => drawEmpCell(G.x0 + (E.cur.x + cx) * G.cell, G.y0 + (E.cur.y + cy) * G.cell, G.cell, empCellKind(E.cur, i)));
     }
 
-    // Panneau latéral : pièce suivante et avatar qui réagit
-    ctx.fillStyle = 'rgba(0,0,0,.34)'; rr(ctx, G.sx - 3, G.y0 - 6, EMP_SIDE - 4, 132, 9); ctx.fill();
+    // Disparitions en cours
+    const ax = G.mid, ay = G.y0 + 150;
+    for (const f of E.fx) {
+      const s = f.s;
+      if (f.t < 0) { drawEmpCell(f.x - s / 2, f.y - s / 2, s, f.kind); continue; }     // pas encore atteint par la vague
+      const p = clamp(f.t / f.dur, 0, 1);
+      ctx.save();
+      if (f.type === 'collecte') {
+        // Le bloc devient une friandise qui file vers l'avatar
+        const e = p * p;
+        ctx.translate(f.x + (ax - f.x) * e, f.y + (ay - f.y) * e - Math.sin(p * Math.PI) * 40);
+        ctx.rotate(p * 6);
+        const k = (s / 36) * (1 - p * 0.35);
+        ctx.scale(k, k);
+        drawItem(ctx, f.kind === 'friandise' ? 'bonbon' : 'pop', { t: machine.t, seed: f.x % 5, face: th.faces });
+      } else if (f.type === 'tombe') {
+        ctx.translate(f.x, f.y);
+        ctx.globalAlpha = p > 0.6 ? (1 - p) / 0.4 : 1;
+        ctx.rotate(f.rot);
+        drawEmpCell(-s / 2, -s / 2, s, f.kind);
+      } else if (f.type === 'evapore') {
+        // Il blanchit, monte et s'efface
+        ctx.translate(f.x, f.y);
+        ctx.globalAlpha = 1 - p;
+        ctx.scale(1 + p * 0.4, 1 + p * 0.4);
+        drawEmpCell(-s / 2, -s / 2, s, f.kind);
+        ctx.fillStyle = 'rgba(255,255,255,' + (0.35 + p * 0.5) + ')';
+        rr(ctx, -s / 2 + 1.5, -s / 2 + 1.5, s - 3, s - 3, s * 0.22); ctx.fill();
+        circ(ctx, -s * 0.2, -s * 0.6 - p * 10, 3 + p * 3);
+        circ(ctx, s * 0.2, -s * 0.75 - p * 14, 2.5 + p * 3);
+      } else {
+        ctx.translate(f.x, f.y);
+        ctx.globalAlpha = 1 - p;
+        ctx.scale(1 + p * 0.5, 1 + p * 0.5);
+        drawEmpCell(-s / 2, -s / 2, s, f.kind);
+        ctx.fillStyle = 'rgba(255,255,255,' + (0.6 * (1 - p)) + ')';
+        circ(ctx, 0, 0, s * (0.4 + p * 0.7));
+      }
+      ctx.restore();
+    }
+
+    ctx.strokeStyle = E.danger ? 'rgb(255,' + Math.round(110 + 60 * (1 - pulse)) + ',90)' : th.trim;
+    ctx.lineWidth = E.danger ? 3.5 : 2.5;
+    rr(ctx, G.x0 - 6, G.y0 - 6, G.w + 12, G.h + 12, 11); ctx.stroke();
+    // Annonce de la rangée brûlée qui va monter
+    if (g.level >= 3 && E.garb < 1.6) {
+      ctx.fillStyle = 'rgba(255,120,40,' + (0.35 + 0.35 * Math.sin(machine.t * 22)) + ')';
+      ctx.fillRect(G.x0, G.y0 + G.h - 5, G.w, 5);
+    }
+
+    // Colonne latérale : les deux pièces suivantes et l'avatar qui réagit
+    ctx.fillStyle = 'rgba(0,0,0,.34)'; rr(ctx, G.sx - 3, G.y0 - 6, EMP_SIDE - 4, 186, 9); ctx.fill();
     ctx.fillStyle = '#fff4d6';
     ctx.font = '800 10px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const mid = G.sx + (EMP_SIDE - 10) / 2;
-    ctx.fillText('SUIVANT', mid, G.y0 + 6);
-    const n = E.next, mini = 11;
-    const nw = empWidth(n.cells), nh = 1 + Math.max(...n.cells.map((c) => c[1]));
-    for (const [cx, cy] of n.cells) drawEmpCell(mid - nw * mini / 2 + cx * mini, G.y0 + 30 - nh * mini / 2 + cy * mini, mini, n.kind);
-    drawAvatar(ctx, save.avatar, mid, G.y0 + 92, 19, E.joy > 0 ? 'happy' : top < 4 ? 'sad' : '');
+    ctx.fillText('SUIVANT', G.mid, G.y0 + 6);
+    E.queue.forEach((n, q) => {
+      const mini = q === 0 ? 11 : 8;
+      const nw = empWidth(n.cells), nh = 1 + Math.max(...n.cells.map((c) => c[1]));
+      const cy = G.y0 + (q === 0 ? 34 : 78);
+      if (q === 1) ctx.globalAlpha = 0.7;
+      n.cells.forEach(([cx, cyy], i) => drawEmpCell(G.mid - nw * mini / 2 + cx * mini, cy - nh * mini / 2 + cyy * mini, mini, empCellKind(n, i)));
+      ctx.globalAlpha = 1;
+    });
+    drawAvatar(ctx, save.avatar, G.mid, ay, 19, E.joy > 0 ? 'happy' : E.danger ? 'sad' : '');
   }
 
   function drawEmpButtons() {
-    const y = ctrlY();
     for (const b of empButtons()) {
-      ctx.fillStyle = OUT; circ(ctx, b.x, y, 27);
-      ctx.fillStyle = th.trim; circ(ctx, b.x, y, 25);
-      ctx.fillStyle = b.id === 'rot' ? '#7a4fd6' : '#17907c'; circ(ctx, b.x, y, 21);
+      const y = b.y;
+      ctx.fillStyle = OUT; circ(ctx, b.x, y, 26);
+      ctx.fillStyle = th.trim; circ(ctx, b.x, y, 24);
+      ctx.fillStyle = b.id === 'rot' ? '#7a4fd6' : '#17907c'; circ(ctx, b.x, y, 20.5);
       ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
       if (b.id === 'rot') {
         ctx.beginPath(); ctx.arc(b.x, y, 10, Math.PI * 0.35, Math.PI * 1.85); ctx.stroke();
@@ -1724,7 +1899,7 @@
     const x = (e.clientX - r.left) / scale, y = (e.clientY - r.top) / scale;
     if (e.type === 'pointerdown') {
       for (const b of empButtons()) {
-        if (Math.hypot(x - b.x, y - ctrlY()) < 31) {
+        if (Math.hypot(x - b.x, y - b.y) < 33) {
           if (b.id === 'rot') empRotate(); else empDrop();
           return true;
         }
@@ -2670,7 +2845,7 @@
         const n = Math.max(1, Math.ceil(g.count));
         const f = g.count - Math.floor(g.count);
         bigText(String(n), W / 2, H * 0.48, 110 + f * 40, '#fff4d6', 1);
-        bigText(mode === 'brique' ? 'Renvoie le grain avec ton seau' : mode === 'invasion' ? 'Vise avec la poignée, esquive les braises' : mode === 'empile' ? 'Poignée : déplacer · boutons : tourner, lâcher' : mode === 'laby' ? 'Glisse le doigt dans la direction voulue' : 'Glisse la poignée sous ton personnage', W / 2, H * 0.48 + 110, Math.min(18, W / 22), '#fff4d6', 1);
+        bigText(mode === 'brique' ? 'Renvoie le grain avec ton seau' : mode === 'invasion' ? 'Vise avec la poignée, esquive les braises' : mode === 'empile' ? 'Glisse la poignée sous la colonne voulue' : mode === 'laby' ? 'Glisse le doigt dans la direction voulue' : 'Glisse la poignée sous ton personnage', W / 2, H * 0.48 + 110, Math.min(18, W / 22), '#fff4d6', 1);
       }
       if (g.banner) {
         const a = clamp(g.banner.t * 2, 0, 1);
