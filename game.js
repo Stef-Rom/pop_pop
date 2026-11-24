@@ -2621,7 +2621,14 @@
   $('#btnPrev').addEventListener('click', () => cycleAvatar(-1));
   $('#btnNext').addEventListener('click', () => cycleAvatar(1));
   $('#btnTuto').addEventListener('click', () => { save.tuto = true; persist(); newGame('tuto'); });
-  $('#btnUpdate').addEventListener('click', () => location.reload());
+  // Recharge en contournant le cache du navigateur, qui peut garder les anciens fichiers quelques minutes
+  $('#btnUpdate').addEventListener('click', async () => {
+    $('#btnUpdate').textContent = 'Chargement…';
+    try {
+      await Promise.all(VERSION_FILES.concat(['online.js', './']).map((f) => fetch(f, { cache: 'reload' })));
+    } catch (e) {}
+    location.reload();
+  });
 
   // ---------- Commandes ----------
   // Au doigt, le seau suit le mouvement et non la position : on peut glisser n'importe où
