@@ -188,6 +188,55 @@
     }
   }
 
+  // ---------- Ennemis du mode Invasion ----------
+  const FOE_LOOK = {
+    brule: { light: '#4c3a32', mid: '#231916', halo: 'rgba(255,70,20,.62)', face: '#ffb37a', gloss: 'rgba(255,170,100,.45)' },
+    braise: { light: '#f0562e', mid: '#a3200f', halo: 'rgba(255,196,40,.75)', face: '#3a0c05', gloss: 'rgba(255,240,170,.85)' },
+    costaud: { light: '#6a7080', mid: '#353944', halo: 'rgba(150,170,210,.55)', face: '#e6ecff', gloss: 'rgba(255,255,255,.55)' },
+    fumee: { light: '#c9c3d6', mid: '#8a8399', halo: 'rgba(235,230,248,.45)', face: '#4a3f63', gloss: 'rgba(255,255,255,.85)' },
+  };
+
+  // Dessine un ennemi centré en (0,0). o = { hp, hit, t }
+  function drawFoe(c, kind, o) {
+    const L = FOE_LOOK[kind] || FOE_LOOK.brule;
+    const t = o.t || 0;
+    c.fillStyle = L.halo;
+    if (kind === 'fumee') {
+      // Volutes de fumée qui respirent
+      const p = Math.sin(t * 3) * 1.5;
+      circ(c, -12, -6, 9 + p); circ(c, 12, -4, 9 - p); circ(c, 0, -16, 9 + p); circ(c, -7, 10, 8 - p); circ(c, 9, 9, 8 + p);
+      circ(c, 0, -1, 17);
+    } else {
+      // Halo hérissé : flammes longues pour la braise, court et régulier pour le costaud
+      const n = kind === 'braise' ? 14 : kind === 'costaud' ? 12 : 20;
+      const rOut = kind === 'braise' ? 23 : kind === 'costaud' ? 20 : 21;
+      const rIn = kind === 'costaud' ? 17 : 14.5;
+      c.beginPath();
+      for (let i = 0; i < n; i++) {
+        const a = i * TAU / n;
+        const flick = kind === 'braise' && i % 2 === 0 ? Math.sin(t * 9 + i) * 2.5 : 0;
+        const r = i % 2 ? rIn : rOut + flick;
+        c.lineTo(Math.cos(a) * r, Math.sin(a) * r - 1);
+      }
+      c.closePath(); c.fill();
+    }
+    kernel(c, L.light, L.mid, null, L.gloss);
+    if (kind === 'costaud') {
+      // Bandeau riveté ; il se fissure quand il ne reste qu'un point de vie
+      c.fillStyle = '#23262e'; rr(c, -13, -14, 26, 5, 2.5); c.fill();
+      c.fillStyle = '#aab3c8'; circ(c, -9, -11.5, 1.3); circ(c, 0, -11.5, 1.3); circ(c, 9, -11.5, 1.3);
+      if (o.hp === 1) {
+        c.strokeStyle = '#0e1016'; c.lineWidth = 1.6; c.lineCap = 'round';
+        c.beginPath(); c.moveTo(-10, -8); c.lineTo(-4, -3); c.lineTo(-8, 2); c.lineTo(-2, 8); c.moveTo(8, -7); c.lineTo(5, -1); c.lineTo(9, 5); c.stroke();
+      }
+    }
+    face(c, true, L.face);
+    if (o.hit > 0) {
+      c.fillStyle = 'rgba(255,255,255,' + Math.min(0.9, o.hit * 5) + ')';
+      circ(c, 0, -1, 16);
+    }
+  }
+
   // ---------- Avatars (tête centrée en x,y, rayon r) ----------
   function drawAvatar(c, id, x, y, r, mood) {
     c.save();
@@ -544,5 +593,5 @@
     c.fillStyle = skin === 'dore' ? '#fff3b0' : th.rim; rr(c, -bw - 2, -3, 2 * bw + 4, 6, 3); c.fill();
   }
 
-  window.Art = { TAU, OUT, circ, oval, rr, star, drawItem, drawAvatar, drawBucket };
+  window.Art = { TAU, OUT, circ, oval, rr, star, drawItem, drawFoe, drawAvatar, drawBucket };
 })();

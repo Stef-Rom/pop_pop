@@ -393,3 +393,83 @@ h2.title { margin-top: 0; font-size: 26px; font-weight: 900; color: var(--accent
   text-align: center;
   pointer-events: none;
 }
+
+/* ---------- Navigation ---------- */
+/* Bouton d'accès au vestiaire, mis en avant quand un déblocage est possible */
+.btn.vest {
+  min-height: 52px;
+  border: 3px solid var(--trim);
+  background: var(--card);
+  box-shadow: 0 5px 0 var(--trim);
+  color: var(--ink);
+  font-size: 18px;
+}
+.btn.vest:active { box-shadow: 0 2px 0 var(--trim); }
+.btn.vest.notify {
+  border-color: #ff9d1f;
+  background: #ffd257;
+  box-shadow: 0 5px 0 #c9770a;
+  color: #4a0e16;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse { 50% { transform: scale(1.035); } }
+@media (prefers-reduced-motion: reduce) { .btn.vest.notify { animation: none; } }
+
+/* Tuiles du menu */
+.navgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.tile {
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: 0 4px 0 var(--card-sel);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+.tile span { display: block; font-size: 24px; line-height: 1.25; }
+.tile:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--card-sel); }
+
+/* En-tête des écrans secondaires : le retour au menu reste visible en haut pendant le défilement */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  margin: -18px -16px 8px;
+  padding: 10px 84px 8px;
+  border-radius: 20px 20px 0 0;
+  background: var(--panel);
+}
+.topbar .title { margin: 0; }
+.back {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--card-sel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* Bouton du mode Casse-briques */
+.btn.third { background: #7a4fd6; box-shadow: 0 5px 0 #4f2f9c; color: #fff; }
+.btn.third:active { box-shadow: 0 2px 0 #4f2f9c; }
+
+/* Deuxième rangée de modes, et bouton du mode Invasion */
+.modes.more { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.modes.more .btn { min-height: 60px; padding: 8px 3px; font-size: 14px; }
+.modes.more .btn small { font-size: 10.5px; }
+.btn.fifth { background: #e0559a; box-shadow: 0 5px 0 #a8346f; color: #fff; }
+.btn.fifth:active { box-shadow: 0 2px 0 #a8346f; }
+.btn.fourth { background: #17907c; box-shadow: 0 5px 0 #0d5f52; color: #fff; }
+.btn.fourth:active { box-shadow: 0 2px 0 #0d5f52; }
