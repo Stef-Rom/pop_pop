@@ -9,7 +9,8 @@
   // ---------- Constantes ----------
   const WALL = 18;          // largeur des rideaux
   const MY = 54;            // haut de la machine
-  const MS = 1.25;          // échelle de la machine
+  const MS = 1.1;           // échelle de la machine
+  const CTRL_H = 86;        // hauteur de la zone de commande, sous le sol
   const PS = 1.3;           // échelle du joueur
   const MISS_MAX = 3;       // ratés d'affilée avant de perdre une vie (Survie)
   const LEVEL_PTS = 200;    // points pour passer au niveau suivant
@@ -296,7 +297,7 @@
   const player = { x: 200, tx: 200, lean: 0, bounce: 0 };
   const keys = { left: false, right: false };
 
-  const groundY = () => H - 24;
+  const groundY = () => H - 24 - CTRL_H;
   const rimY = () => groundY() - 112 * PS;
   const bucketHalf = () => (g && g.giant > 0 ? 50 : 27);
   const lerp = (a, b, t) => a + (b - a) * t;
@@ -309,7 +310,7 @@
     if (!r.width || !r.height) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     // L'écran entier sert de terrain : au moins 400 de large et 620 de haut en unités logiques
-    scale = Math.min(r.width / 400, r.height / 620);
+    scale = Math.min(r.width / 400, r.height / (620 + CTRL_H));
     W = r.width / scale;
     H = r.height / scale;
     canvas.width = Math.round(r.width * dpr);
@@ -586,7 +587,7 @@
   }
 
   // ---------- Tutoriel jouable ----------
-  const TUTO = ['Glisse ton doigt pour bouger le seau', 'Attrape 3 pop-corn !', 'Un bonbon vaut plus de points !', 'Laisse tomber le grain brûlé !'];
+  const TUTO = ['Glisse la poignée pour bouger le seau', 'Attrape 3 pop-corn !', 'Un bonbon vaut plus de points !', 'Laisse tomber le grain brûlé !'];
   function tutoSay(txt, col) { g.banner = { txt: txt || TUTO[g.tuto.step], col: col || '#fff4d6', t: 1.7 }; }
   function tutoNext() {
     const t = g.tuto;
@@ -695,7 +696,7 @@
     }
 
     const playing = state === 'play';
-    const grav = H * 0.55 * (1 + 0.35 * Math.min(d, 1.6));
+    const grav = (H - CTRL_H) * 0.55 * (1 + 0.35 * Math.min(d, 1.6));
     const gy = groundY();
     const ry = rimY();
     const bw = bucketHalf() * PS;
@@ -1072,6 +1073,50 @@
     ctx.restore();
   }
 
+  // Zone de commande sous le sol : un rail et une poignée alignée sous le personnage.
+  // Le doigt se pose sur la poignée, le personnage reste visible au-dessus.
+  const ctrlY = () => groundY() + 24 + (CTRL_H - 8) / 2;
+  function drawControl() {
+    const gy = groundY();
+    const y = ctrlY();
+    const x0 = WALL + 30, x1 = W - WALL - 30;
+    const held = dragAbs && dragId !== null;
+
+    ctx.fillStyle = 'rgba(0,0,0,.30)';
+    ctx.fillRect(0, gy + 14, W, H - gy - 14);
+
+    // Rail
+    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    rr(ctx, x0 - 8, y - 8, x1 - x0 + 16, 16, 8); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.22)';
+    rr(ctx, x0 - 6, y - 6, x1 - x0 + 12, 12, 6); ctx.fill();
+    ctx.fillStyle = th.trim;
+    ctx.globalAlpha = 0.5;
+    for (let i = 0; i <= 8; i++) circ(ctx, x0 + (x1 - x0) * i / 8, y, 2);
+    ctx.globalAlpha = 1;
+
+    // Lien visuel entre la poignée et le personnage
+    ctx.strokeStyle = 'rgba(255,255,255,.28)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.moveTo(player.x, gy + 8); ctx.lineTo(player.x, y - 28); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Poignée
+    const r = held ? 31 : 28;
+    if (held) { ctx.fillStyle = 'rgba(255,255,255,.22)'; circ(ctx, player.x, y, r + 9); }
+    ctx.fillStyle = OUT; circ(ctx, player.x, y, r + 2);
+    ctx.fillStyle = th.trim; circ(ctx, player.x, y, r);
+    ctx.fillStyle = th.machine; circ(ctx, player.x, y, r - 5);
+    ctx.fillStyle = 'rgba(255,255,255,.25)'; oval(ctx, player.x - 6, y - 10, 11, 5, -0.4);
+    ctx.fillStyle = th.sign;
+    for (const sx of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(player.x + sx * 16, y); ctx.lineTo(player.x + sx * 6, y - 8); ctx.lineTo(player.x + sx * 6, y + 8);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
   function bigText(txt, x, y, size, col, alpha) {
     ctx.globalAlpha = alpha;
     ctx.font = '900 ' + size + 'px system-ui, sans-serif';
@@ -1103,7 +1148,7 @@
       ctx.restore();
     }
     drawMachine();
-    if (inGame()) drawPlayer();
+    if (inGame()) { drawPlayer(); drawControl(); }
 
     for (const p of parts) {
       const k = clamp(p.life / p.max, 0, 1);
@@ -1125,7 +1170,7 @@
         const n = Math.max(1, Math.ceil(g.count));
         const f = g.count - Math.floor(g.count);
         bigText(String(n), W / 2, H * 0.48, 110 + f * 40, '#fff4d6', 1);
-        bigText('Glisse ton doigt n\'importe où pour déplacer le seau', W / 2, H * 0.48 + 110, Math.min(17, W / 25), '#fff4d6', 1);
+        bigText('Glisse la poignée sous ton personnage', W / 2, H * 0.48 + 110, Math.min(18, W / 22), '#fff4d6', 1);
       }
       if (g.banner) {
         const a = clamp(g.banner.t * 2, 0, 1);
@@ -1581,6 +1626,7 @@
   const DRAG_GAIN = 1.25;   // le seau va un peu plus vite que le doigt, pour couvrir l'écran sans grand geste
   let dragId = null;
   let dragX = 0;
+  let dragAbs = false;      // vrai quand le doigt tient la poignée
   function pointer(e) {
     if (state !== 'play' && state !== 'count') { dragId = null; return; }
     if (e.pointerType === 'mouse') {
@@ -1588,12 +1634,17 @@
       player.tx = (e.clientX - r.left) / scale;
       return;
     }
+    const r = canvas.getBoundingClientRect();
     if (e.type === 'pointerdown' || e.pointerId !== dragId) {
       dragId = e.pointerId;
       dragX = e.clientX;
-      return;
+      // Un doigt posé dans la zone de commande pilote la poignée directement ;
+      // posé ailleurs, il déplace le seau par glissement relatif.
+      dragAbs = (e.clientY - r.top) / scale >= groundY() + 14;
+      if (!dragAbs) return;
     }
-    player.tx = clamp(player.tx + (e.clientX - dragX) / scale * DRAG_GAIN, WALL + 30, W - WALL - 30);
+    if (dragAbs) player.tx = clamp((e.clientX - r.left) / scale, WALL + 30, W - WALL - 30);
+    else player.tx = clamp(player.tx + (e.clientX - dragX) / scale * DRAG_GAIN, WALL + 30, W - WALL - 30);
     dragX = e.clientX;
   }
   const pointerEnd = (e) => { if (e.pointerId === dragId) dragId = null; };
