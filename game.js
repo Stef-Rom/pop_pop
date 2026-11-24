@@ -345,7 +345,7 @@
     }
     if (m === 'invasion') {
       g.wave = 1;
-      g.inv = { list: [], shots: [], bombs: [], fx: [], shields: null, charge: null, dir: 1, total: 1, enter: 0, fire: 0.6, bombT: 2, fly: null, flyT: 10, beat: 0, beatI: 0, warned: false };
+      g.inv = { list: [], shots: [], bombs: [], fx: [], caps: [], shields: null, charge: null, boss: null, dir: 1, ox: 0, oy: 0, total: 1, enter: 0, fire: 0.6, bombT: 2, diveT: 6, fly: null, flyT: 10, beat: 0, beatI: 0, warned: false, weapon: 'simple', weaponT: 0, bubble: false, streak: 0 };
       buildWave();
     }
     if (m === 'brique') {
@@ -1035,6 +1035,7 @@
   // il faut viser avec la poignée, esquiver les braises et rattraper ce qui tombe.
   const INV_TOP = 96;
   const INV_ENTER = 0.9;          // durée de l'arrivée d'une vague
+  const INV_BOSS_EVERY = 4;       // une vague sur quatre est celle d'un roi
   // deaths : les façons de disparaître possibles pour ce type d'ennemi
   const FOES = {
     brule: { pts: 10, hp: 1, size: 1, shoots: true, drop: 0.2, deaths: ['eclate', 'evapore', 'tombe'] },
@@ -1042,7 +1043,25 @@
     fumee: { pts: 20, hp: 1, size: 1, shoots: false, drop: 0.3, deaths: ['evapore'] },
     costaud: { pts: 30, hp: 2, size: 1.2, shoots: false, drop: 0.5, deaths: ['tombe'] },
   };
+  // Bonus à rattraper avec le seau
+  const INV_CAPS = {
+    double: { col: '#3a9cff', label: 'Double tir !' },
+    eventail: { col: '#8a5cff', label: 'Tir en éventail !' },
+    bulle: { col: '#22b96e', label: 'Bulle de protection !' },
+    bombe: { col: '#ff8a1f', label: 'Boum !' },
+  };
   const shieldY = () => rimY() - 82;
+  const invMult = () => 1 + Math.min(4, Math.floor(g.inv.streak / 6));
+
+  // Bonus en cours, pour l'affichage en haut de l'écran
+  function invPower() {
+    const v = g.inv;
+    if (g.rapid > 0) return { txt: 'Tir rapide ' + Math.ceil(g.rapid), t: g.rapid * 1.33 };
+    if (v.weaponT > 0) return { txt: (v.weapon === 'double' ? 'Double tir ' : 'Éventail ') + Math.ceil(v.weaponT), t: v.weaponT };
+    if (v.bubble) return { txt: 'Bulle active', t: 8 };
+    const left = v.list.filter((e) => e.alive).length;
+    return { txt: !v.boss && left > 0 && left <= 6 ? 'Reste ' + left : '', t: 0 };
+  }
 
   // Type d'ennemi de chaque rangée, de haut en bas : la variété arrive avec les vagues
   function rowKinds(rows) {
@@ -1055,29 +1074,58 @@
 
   function buildWave() {
     const v = g.inv;
-    const cols = clamp(Math.round((W - 2 * WALL - 90) / 48), 5, 9);
-    const rows = Math.min(3 + Math.floor((g.wave - 1) / 2), 5);
-    const kinds = rowKinds(rows);
     v.list = [];
     v.dir = 1;
-    v.total = cols * rows;
+    v.ox = 0;
+    v.oy = 0;
     v.shots = [];
     v.bombs = [];
     v.charge = null;
-    v.bombT = 1.4;
+    v.bombT = 1.6;
+    v.diveT = 5 + Math.random() * 3;
     v.enter = INV_ENTER;
     v.warned = false;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        v.list.push({ x: WALL + 32 + c * 46, y: INV_TOP + r * 40, kind: kinds[r], hp: FOES[kinds[r]].hp, alive: true, hit: 0, ph: Math.random() * 6 });
+    v.boss = null;
+    const slot = (x, y, kind) => v.list.push({ sx: x, sy: y, x, y, kind, hp: FOES[kind].hp, alive: true, hit: 0, dive: null, ph: Math.random() * 6 });
+
+    if (g.wave % INV_BOSS_EVERY === 0) {
+      // Vague du roi : un très gros grain, et une petite escorte
+      const n = g.wave / INV_BOSS_EVERY;
+      const hp = 14 + 6 * n;
+      v.boss = { x: W / 2, y: INV_TOP + 34, dir: 1, hp, max: hp, kind: ['costaud', 'braise', 'fumee'][(n - 1) % 3], hit: 0, fireT: 2, t: 0 };
+      for (let c = 0; c < 4; c++) slot(W / 2 + (c - 1.5) * 46, INV_TOP + 110, 'brule');
+    } else {
+      const cols = clamp(Math.round((W - 2 * WALL - 90) / 48), 5, 9);
+      const rows = Math.min(3 + Math.floor((g.wave - 1) / 2), 5);
+      const kinds = rowKinds(rows);
+      const mid = (cols - 1) / 2, midr = (rows - 1) / 2;
+      // La forme de la troupe change d'une vague à l'autre : bloc, pointe, losange, deux groupes
+      const shape = (g.wave - 1) % 4;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (shape === 1 && r > rows - 1 - (Math.abs(c - mid) - 0.5) * 0.7 + 0.01) continue;
+          if (shape === 2 && Math.abs(c - mid) / Math.max(1, mid) + Math.abs(r - midr) / Math.max(1, midr) > 1.2) continue;
+          if (shape === 3 && Math.abs(c - mid) < 0.6) continue;
+          slot(WALL + 32 + c * 46, INV_TOP + r * 40, kinds[r]);
+        }
       }
     }
+    v.total = Math.max(1, v.list.length);
     // Trois cornets de pop-corn servent d'abris ; ils se regarnissent un peu à chaque vague
-    if (!v.shields) v.shields = [0.2, 0.5, 0.8].map((t) => ({ x: WALL + t * (W - 2 * WALL), hp: 5 }));
-    else for (const s of v.shields) s.hp = Math.min(5, s.hp + 2);
+    if (!v.shields) v.shields = [0.2, 0.5, 0.8].map((t) => ({ x: WALL + t * (W - 2 * WALL), hp: 6 }));
+    else for (const s of v.shields) s.hp = Math.min(6, s.hp + 2);
+  }
+
+  function invRecord() {
+    if (!g.recordShown && save.best.invasion > 0 && g.score > save.best.invasion) {
+      g.recordShown = true;
+      banner('Nouveau record !', '#ffe27a');
+      jingle([784, 988, 1175, 1568], 90);
+    }
   }
 
   function hitInvader(e) {
+    const v = g.inv;
     e.hp--;
     if (e.hp > 0) {
       e.hit = 0.18;
@@ -1087,13 +1135,13 @@
     }
     e.alive = false;
     const F = FOES[e.kind];
-    const pts = F.pts * g.wave;
+    const pts = F.pts * g.wave * invMult() * (e.dive ? 2 : 1);       // un plongeur abattu en vol vaut double
     g.score += pts;
-    floatText('+' + pts, e.x, e.y - 14, e.kind === 'braise' ? '#ffcf7a' : e.kind === 'costaud' ? '#cfe0ff' : '#fff4d6');
+    floatText('+' + pts, e.x, e.y - 14, e.dive ? '#9fe8ff' : e.kind === 'braise' ? '#ffcf7a' : e.kind === 'costaud' ? '#cfe0ff' : '#fff4d6');
     buzz(8);
 
     // Plusieurs façons de disparaître
-    const fx = { kind: e.kind, x: e.x, y: e.y, t: 0, rot: 0, vx: 0, vy: 0, vr: 0, item: null };
+    const fx = { kind: e.kind, x: e.x, y: e.y, t: 0, rot: 0, vx: 0, vy: 0, vr: 0, item: null, big: false };
     if (Math.random() < F.drop) {
       // Il se transforme en friandise, qui tombe : à rattraper
       const r = Math.random();
@@ -1104,31 +1152,57 @@
     } else {
       fx.type = F.deaths[Math.floor(Math.random() * F.deaths.length)];
       if (fx.type === 'evapore') {
-        // Il blanchit et s'évapore
         fx.dur = 0.9;
         tone(500, 0.3, 'sine', 0.06, 700);
       } else if (fx.type === 'tombe') {
-        // Assommé, il tournoie et tombe hors de l'écran
         fx.dur = 1.3;
         fx.vx = (Math.random() - 0.5) * 120;
         fx.vy = -170;
         fx.vr = (Math.random() < 0.5 ? -1 : 1) * (7 + Math.random() * 5);
         tone(420, 0.35, 'triangle', 0.07, -300);
       } else {
-        // Il éclate comme un pop-corn
         fx.dur = 0.32;
         burst(e.x, e.y, e.kind === 'braise' ? '#ffb347' : '#fffaf0', 12);
         ring(e.x, e.y, e.kind === 'braise' ? '#ffb347' : '#fffaf0');
         popSound(0.14);
       }
+      // Parfois, il lâche un bonus
+      if (Math.random() < (e.kind === 'costaud' ? 0.3 : 0.12)) invCapsule(e.x, e.y);
     }
-    g.inv.fx.push(fx);
+    v.fx.push(fx);
+    invRecord();
+  }
 
-    if (!g.recordShown && save.best.invasion > 0 && g.score > save.best.invasion) {
-      g.recordShown = true;
-      banner('Nouveau record !', '#ffe27a');
-      jingle([784, 988, 1175, 1568], 90);
+  function invCapsule(x, y) {
+    const kinds = Object.keys(INV_CAPS);
+    g.inv.caps.push({ kind: kinds[Math.floor(Math.random() * kinds.length)], x, y, vy: 40 });
+  }
+
+  function hitBoss(dmg) {
+    const v = g.inv, b = v.boss;
+    b.hp -= dmg;
+    b.hit = 0.12;
+    burst(b.x + (Math.random() - 0.5) * 50, b.y + 20, '#cdd6ea', 3);
+    tone(200 + Math.random() * 60, 0.05, 'square', 0.05);
+    // À mi-vie, le roi lâche un bonus
+    if (!b.gift && b.hp <= b.max / 2) { b.gift = true; invCapsule(b.x, b.y + 40); }
+    if (b.hp > 0) return;
+    const pts = 300 * (g.wave / INV_BOSS_EVERY) * invMult();
+    g.score += pts;
+    g.got.candy += 3;
+    floatText('+' + pts, b.x, b.y, '#ffe27a');
+    banner('Roi vaincu !', '#ffe27a');
+    jingle([523, 659, 784, 1047, 1319], 100);
+    shakeT = 0.4;
+    buzz(120);
+    for (let i = 0; i < 7; i++) {
+      v.fx.push({ kind: b.kind, type: 'eclate', x: b.x + (Math.random() - 0.5) * 110, y: b.y + (Math.random() - 0.5) * 80, t: -i * 0.07, dur: 0.45, rot: 0, vx: 0, vy: 0, vr: 0, item: null, big: true });
+      const r = Math.random();
+      items.push({ type: r < 0.4 ? 'bonbon' : r < 0.6 ? 'sucette' : 'caramel', x: b.x + (Math.random() - 0.5) * 120, y: b.y, vx: (Math.random() - 0.5) * 90, vy: -120 - Math.random() * 120, rot: 0, vr: (Math.random() - 0.5) * 6, seed: Math.random() * 360, free: true });
     }
+    burst(b.x, b.y, '#ffd257', 30, true);
+    v.boss = null;
+    invRecord();
   }
 
   function updateFx(dt) {
@@ -1136,6 +1210,7 @@
     for (let i = v.fx.length - 1; i >= 0; i--) {
       const f = v.fx[i];
       f.t += dt;
+      if (f.t < 0) continue;
       if (f.type === 'tombe') { f.vy += 760 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt; }
       else if (f.type === 'evapore') f.y -= 46 * dt;
       if (f.t < f.dur) continue;
@@ -1146,47 +1221,109 @@
     }
   }
 
+  // Coup reçu. Renvoie vrai si une vie a été perdue (faux si la bulle a encaissé).
   function invHurt(x, y, label) {
-    g.inv.bombs = [];
-    g.inv.charge = null;
+    const v = g.inv;
+    if (v.bubble) {
+      v.bubble = false;
+      g.invul = 0.7;
+      ring(player.x, rimY() - 20, '#7be0a0');
+      burst(player.x, rimY() - 20, '#7be0a0', 12, true);
+      floatText('Bulle !', player.x, rimY() - 60, '#7be0a0');
+      popSound(0.16);
+      v.bombs = [];
+      return false;
+    }
+    v.bombs = [];
+    v.charge = null;
+    v.streak = 0;
+    g.combo = 0;
     shakeT = 0.3;
     loseLife(x, y, label);
     if (state === 'play') g.invul = 1.4;     // court répit, signalé par le clignotement du personnage
+    return true;
+  }
+
+  function invApply(kind) {
+    const v = g.inv;
+    banner(INV_CAPS[kind].label, '#9fe8ff');
+    jingle([784, 1047, 1319], 60);
+    buzz(30);
+    if (kind === 'double' || kind === 'eventail') { v.weapon = kind; v.weaponT = 8; }
+    else if (kind === 'bulle') v.bubble = true;
+    else {
+      // Boum : la rangée la plus basse est balayée, ou le roi encaisse un gros coup
+      shakeT = 0.3;
+      if (v.boss) hitBoss(8);
+      const alive = v.list.filter((e) => e.alive && !e.dive);
+      if (alive.length) {
+        const low = Math.max(...alive.map((e) => e.sy));
+        for (const e of alive) if (e.sy === low) { e.hp = 1; hitInvader(e); }
+      }
+    }
   }
 
   function invUpdate(dt) {
     const v = g.inv;
     g.invul = Math.max(0, g.invul - dt);
     g.rapid = Math.max(0, g.rapid - dt);
+    v.weaponT = Math.max(0, v.weaponT - dt);
+    if (v.weaponT <= 0) v.weapon = 'simple';
     updateFx(dt);
     if (v.enter > 0) { v.enter -= dt; return; }
 
     const alive = v.list.filter((e) => e.alive);
-    if (!alive.length) {
+    if (!alive.length && !v.boss) {
       if (v.fx.length) return;               // on laisse finir les dernières disparitions
+      const bonus = 40 * g.wave;
+      g.score += bonus;
       g.wave++;
       g.level = g.wave;
-      g.score += 40 * (g.wave - 1);
-      banner('Vague ' + g.wave + ' !', '#ffe27a');
+      floatText('Vague terminée ! +' + bonus, W / 2, H * 0.34, '#9fe8ff');
+      banner(g.wave % INV_BOSS_EVERY === 0 ? 'Le roi arrive !' : 'Vague ' + g.wave + ' !', '#ffe27a');
       jingle([523, 659, 784, 1047], 90);
       buildWave();
       return;
     }
 
-    // La troupe accélère à mesure qu'elle se vide
+    // La troupe accélère à mesure qu'elle se vide ; elle se déplace d'un bloc, sauf les plongeurs
+    const ranks = alive.filter((e) => !e.dive);
     const thin = 1 - alive.length / v.total;
     const speed = (26 + 7 * g.wave) * (1 + 1.4 * thin);
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const e of ranks) {
+      minX = Math.min(minX, e.sx + v.ox); maxX = Math.max(maxX, e.sx + v.ox);
+      minY = Math.min(minY, e.sy + v.oy); maxY = Math.max(maxY, e.sy + v.oy);
+    }
+    if (ranks.length) {
+      if (v.dir > 0 && maxX + 22 >= W - WALL) { v.dir = -1; v.oy += 16; maxY += 16; minY += 16; }
+      else if (v.dir < 0 && minX - 22 <= WALL) { v.dir = 1; v.oy += 16; maxY += 16; minY += 16; }
+      v.ox += v.dir * speed * dt;
+    }
+    const reach = bucketHalf() * PS * 0.85;
     for (const e of alive) {
       if (e.hit > 0) e.hit -= dt;
-      minX = Math.min(minX, e.x); maxX = Math.max(maxX, e.x);
-      minY = Math.min(minY, e.y); maxY = Math.max(maxY, e.y);
+      if (!e.dive) { e.x = e.sx + v.ox; e.y = e.sy + v.oy; continue; }
+      if (e.dive.back) {
+        // Il regagne sa place dans les rangs
+        const tx = e.sx + v.ox, ty = e.sy + v.oy;
+        e.x += (tx - e.x) * Math.min(1, dt * 6);
+        e.y += (ty - e.y) * Math.min(1, dt * 4);
+        if (Math.abs(ty - e.y) < 3) e.dive = null;
+        continue;
+      }
+      // Plongeon : il fonce vers le bas en se rapprochant du joueur
+      e.y += (220 + 12 * g.wave) * dt;
+      e.x = clamp(e.x + clamp(player.x - e.x, -1, 1) * (e.y < rimY() - 110 ? 95 : 20) * dt, WALL + 20, W - WALL - 20);
+      if (g.invul <= 0 && e.y > rimY() - 12 && e.y < groundY() && Math.abs(e.x - player.x) < reach + 8) {
+        e.alive = false;
+        burst(e.x, e.y, '#ff8a3d', 10);
+        invHurt(player.x, rimY() - 16, '−1 ❤');
+        if (state !== 'play') return;
+        continue;
+      }
+      if (e.y > groundY() + 30) { e.dive.back = true; e.y = INV_TOP - 80; e.x = e.sx + v.ox; }
     }
-    let down = 0;
-    if (v.dir > 0 && maxX + 22 >= W - WALL) { v.dir = -1; down = 16; }
-    else if (v.dir < 0 && minX - 22 <= WALL) { v.dir = 1; down = 16; }
-    for (const e of alive) { e.x += v.dir * speed * dt; e.y += down; }
-    maxY += down;
 
     // Battement de marche, de plus en plus pressant
     v.beat -= dt;
@@ -1195,37 +1332,82 @@
       v.beat = lerp(0.85, 0.22, thin);
     }
 
-    if (!v.warned && maxY > rimY() - 200) {
-      v.warned = true;
-      banner('Ils approchent !', '#ff9d6b');
-      buzz(60);
-    }
-    // La troupe écrase les abris, puis atteint le joueur : une vie perdue, et elle repart d'en haut
-    if (maxY + 20 >= shieldY() - 14) for (const s of v.shields) s.hp = 0;
-    if (maxY + 18 >= rimY() - 4) {
-      invHurt(W / 2, rimY() - 50, 'Ils sont passés : −1 ❤');
-      if (state !== 'play') return;
-      const lift = minY + down - INV_TOP;
-      for (const e of v.list) e.y -= lift;
-      v.warned = false;
+    if (ranks.length) {
+      if (!v.warned && maxY > rimY() - 200) {
+        v.warned = true;
+        banner('Ils approchent !', '#ff9d6b');
+        buzz(60);
+      }
+      // La troupe écrase les abris, puis atteint le joueur : une vie perdue, et elle repart d'en haut
+      if (maxY + 20 >= shieldY() - 14) for (const s of v.shields) s.hp = 0;
+      if (maxY + 18 >= rimY() - 4) {
+        v.bubble = false;
+        invHurt(W / 2, rimY() - 50, 'Ils sont passés : −1 ❤');
+        if (state !== 'play') return;
+        v.oy -= minY - INV_TOP;
+        v.warned = false;
+      }
     }
 
-    // Tir automatique du seau
+    // De temps en temps, un grain quitte les rangs et plonge sur le joueur
+    if (g.wave >= 2 && !v.boss) {
+      v.diveT -= dt;
+      if (v.diveT <= 0) {
+        const cand = ranks.filter((e) => e.kind === 'brule' || e.kind === 'braise');
+        if (cand.length >= 2) {
+          const low = Math.max(...cand.map((e) => e.sy));
+          const pool = cand.filter((e) => e.sy === low);
+          pool[Math.floor(Math.random() * pool.length)].dive = { back: false };
+          tone(700, 0.35, 'sawtooth', 0.06, -450);
+        }
+        v.diveT = Math.max(3, 7.5 - 0.4 * g.wave) * (0.8 + Math.random() * 0.4);
+      }
+    }
+
+    // Le roi : il va et vient, et lâche des braises en éventail
+    if (v.boss) {
+      const b = v.boss;
+      b.t += dt;
+      if (b.hit > 0) b.hit -= dt;
+      b.x += b.dir * (55 + 5 * g.wave) * dt;
+      if (b.x > W - WALL - 70) { b.x = W - WALL - 70; b.dir = -1; }
+      if (b.x < WALL + 70) { b.x = WALL + 70; b.dir = 1; }
+      b.fireT -= dt;
+      if (b.fireT <= 0) {
+        for (const vx of [-60, 0, 60]) v.bombs.push({ x: b.x, y: b.y + 56, vx, fast: false });
+        b.fireT = Math.max(1.4, 2.5 - 0.05 * g.wave);
+        tone(180, 0.2, 'sawtooth', 0.07, -60);
+      }
+    }
+
+    // Tir automatique du seau, selon l'arme en cours
     v.fire -= dt;
-    if (v.fire <= 0 && v.shots.length < (g.rapid > 0 ? 5 : 3)) {
-      v.shots.push({ x: player.x, y: rimY() - 12 });
+    const per = v.weapon === 'eventail' ? 3 : v.weapon === 'double' ? 2 : 1;
+    if (v.fire <= 0 && v.shots.length < (g.rapid > 0 ? 5 : 3) * per) {
+      const y = rimY() - 12;
+      if (v.weapon === 'double') { v.shots.push({ x: player.x - 10, y, vx: 0, main: true }, { x: player.x + 10, y, vx: 0, main: false }); }
+      else if (v.weapon === 'eventail') { v.shots.push({ x: player.x, y, vx: 0, main: true }, { x: player.x, y, vx: -130, main: false }, { x: player.x, y, vx: 130, main: false }); }
+      else v.shots.push({ x: player.x, y, vx: 0, main: true });
       v.fire = g.rapid > 0 ? 0.2 : 0.42;
       tone(880, 0.03, 'square', 0.022);
     }
+    const scored = () => { v.streak++; g.combo = v.streak * 2; };       // la précision fait monter le multiplicateur
     for (let i = v.shots.length - 1; i >= 0; i--) {
       const s = v.shots[i];
       s.y -= 540 * dt;
-      if (s.y < 58) { v.shots.splice(i, 1); continue; }
+      s.x += s.vx * dt;
+      if (s.y < 58 || s.x < WALL || s.x > W - WALL) {
+        // Un tir principal qui part dans le vide remet le multiplicateur à zéro
+        if (s.main && v.streak > 0) { v.streak = 0; g.combo = 0; }
+        v.shots.splice(i, 1);
+        continue;
+      }
       if (v.fly && Math.abs(s.x - v.fly.x) < 20 && Math.abs(s.y - v.fly.y) < 18) {
         v.shots.splice(i, 1);
-        g.score += 50;
+        scored();
+        g.score += 50 * invMult();
         g.rapid = 6;
-        floatText('+50', v.fly.x, v.fly.y, '#ffb3da');
+        floatText('+' + 50 * invMult(), v.fly.x, v.fly.y, '#ffb3da');
         burst(v.fly.x, v.fly.y, '#ffb3da', 12, true);
         banner('Tir rapide !', '#9fe8ff');
         jingle([660, 880, 1100], 70);
@@ -1233,10 +1415,17 @@
         v.flyT = 14 + Math.random() * 8;
         continue;
       }
+      if (v.boss && Math.abs(s.x - v.boss.x) < 52 && Math.abs(s.y - v.boss.y) < 46) {
+        v.shots.splice(i, 1);
+        scored();
+        hitBoss(1);
+        continue;
+      }
       for (const e of alive) {
-        const reach = 17 * FOES[e.kind].size;
-        if (e.alive && Math.abs(s.x - e.x) < reach + 1 && Math.abs(s.y - e.y) < reach) {
+        const r = 17 * FOES[e.kind].size;
+        if (e.alive && Math.abs(s.x - e.x) < r + 1 && Math.abs(s.y - e.y) < r) {
           v.shots.splice(i, 1);
+          scored();
           hitInvader(e);
           break;
         }
@@ -1248,28 +1437,28 @@
       v.charge.t -= dt;
       if (v.charge.t <= 0) {
         const e = v.charge.e;
-        if (e.alive) v.bombs.push({ x: e.x, y: e.y + 14, fast: e.kind === 'braise' });
+        if (e.alive && !e.dive) v.bombs.push({ x: e.x, y: e.y + 14, vx: 0, fast: e.kind === 'braise' });
         v.charge = null;
       }
     } else {
       v.bombT -= dt;
       if (v.bombT <= 0) {
-        const shooters = alive.filter((e) => e.alive && FOES[e.kind].shoots);
+        const shooters = ranks.filter((e) => e.alive && FOES[e.kind].shoots);
         if (shooters.length) {
           const pick = shooters[Math.floor(Math.random() * shooters.length)];
           let low = pick;
           for (const e of shooters) if (Math.abs(e.x - pick.x) < 6 && e.y > low.y) low = e;
-          v.charge = { e: low, t: 0.4 };
+          v.charge = { e: low, t: 0.45 };
         }
-        v.bombT = Math.max(0.5, 1.5 - 0.09 * g.wave) * (0.7 + Math.random() * 0.6);
+        v.bombT = Math.max(0.55, 1.75 - 0.09 * g.wave) * (0.7 + Math.random() * 0.6);
       }
     }
-    const reach = bucketHalf() * PS * 0.85;
     const sy = shieldY();
     for (let i = v.bombs.length - 1; i >= 0; i--) {
       const b = v.bombs[i];
-      b.y += (165 + 15 * g.wave) * (b.fast ? 1.3 : 1) * dt;
-      if (b.y > groundY()) { v.bombs.splice(i, 1); burst(b.x, groundY() - 3, '#ff8a3d', 3); continue; }
+      b.y += (150 + 14 * g.wave) * (b.fast ? 1.3 : 1) * dt;
+      b.x += b.vx * dt;
+      if (b.y > groundY() || b.x < WALL || b.x > W - WALL) { v.bombs.splice(i, 1); burst(b.x, Math.min(b.y, groundY() - 3), '#ff8a3d', 3); continue; }
       const shield = v.shields.find((s) => s.hp > 0 && Math.abs(b.x - s.x) < 27 && b.y > sy - 12 && b.y < sy + 24);
       if (shield) {
         shield.hp--;
@@ -1285,6 +1474,20 @@
       }
     }
 
+    // Bonus qui tombent : à rattraper avec le seau
+    for (let i = v.caps.length - 1; i >= 0; i--) {
+      const c = v.caps[i];
+      c.vy = Math.min(150, c.vy + 200 * dt);
+      c.y += c.vy * dt;
+      if (c.y > rimY() - 8 && c.y < rimY() + 28 && Math.abs(c.x - player.x) < bucketHalf() * PS + 6) {
+        v.caps.splice(i, 1);
+        invApply(c.kind);
+        if (state !== 'play') return;
+        continue;
+      }
+      if (c.y > groundY()) v.caps.splice(i, 1);
+    }
+
     // Sucette volante : la toucher donne des points et le tir rapide
     if (v.fly) {
       v.fly.x += v.fly.dir * 110 * dt;
@@ -1298,6 +1501,18 @@
     }
   }
 
+  // Petit pictogramme d'un bonus, centré en (0,0)
+  function drawInvCapsule(kind) {
+    ctx.fillStyle = OUT; rr(ctx, -15.5, -11.5, 31, 23, 11.5); ctx.fill();
+    ctx.fillStyle = INV_CAPS[kind].col; rr(ctx, -14, -10, 28, 20, 10); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.3)'; rr(ctx, -10, -8, 20, 5, 2.5); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+    if (kind === 'double') { circ(ctx, -5, 1, 3.2); circ(ctx, 5, 1, 3.2); }
+    else if (kind === 'eventail') { ctx.beginPath(); ctx.moveTo(0, 6); ctx.lineTo(0, -5); ctx.moveTo(0, 6); ctx.lineTo(-7, -3); ctx.moveTo(0, 6); ctx.lineTo(7, -3); ctx.stroke(); }
+    else if (kind === 'bulle') { ctx.beginPath(); ctx.arc(0, 1, 5.5, 0, TAU); ctx.stroke(); }
+    else star(ctx, 0, 1, 7);
+  }
+
   function drawInvaders() {
     const v = g.inv;
     const sy = shieldY();
@@ -1307,6 +1522,12 @@
     ctx.lineWidth = 2;
     ctx.setLineDash([2, 11]);
     ctx.beginPath(); ctx.moveTo(player.x, rimY() - 16); ctx.lineTo(player.x, INV_TOP - 26); ctx.stroke();
+    // Trajet de la braise qui va tomber
+    if (v.charge && v.charge.e.alive) {
+      ctx.strokeStyle = 'rgba(255,120,60,' + (0.3 + 0.3 * Math.sin(machine.t * 40)) + ')';
+      ctx.setLineDash([4, 8]);
+      ctx.beginPath(); ctx.moveTo(v.charge.e.x, v.charge.e.y + 20); ctx.lineTo(v.charge.e.x, groundY()); ctx.stroke();
+    }
     ctx.setLineDash([]);
 
     // Abris : des cornets dont le pop-corn diminue avec les coups reçus
@@ -1317,6 +1538,14 @@
       ctx.scale(0.72, 0.72);
       drawBucket(ctx, 'classique', 30, th, s.hp + 1);
       ctx.restore();
+    }
+    if (v.bubble) {
+      // Bulle de protection autour du seau
+      ctx.strokeStyle = 'rgba(123,224,160,' + (0.55 + 0.25 * Math.sin(machine.t * 6)) + ')';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.arc(player.x, rimY() + 30, 74, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+      ctx.fillStyle = 'rgba(123,224,160,.10)';
+      ctx.beginPath(); ctx.arc(player.x, rimY() + 30, 74, Math.PI, 0); ctx.fill();
     }
 
     if (v.fly) {
@@ -1330,6 +1559,25 @@
     // Les vagues arrivent en descendant du haut de l'écran
     const k = v.enter > 0 ? v.enter / INV_ENTER : 0;
     const oy = -k * k * 300;
+    if (v.boss) {
+      const b = v.boss;
+      ctx.save();
+      ctx.translate(b.x, b.y + oy + Math.sin(b.t * 3) * 5);
+      ctx.scale(2.9, 2.9);
+      drawFoe(ctx, b.kind, { hp: b.hp < b.max / 3 ? 1 : 2, hit: b.hit, t: machine.t });
+      // Couronne
+      ctx.fillStyle = OUT;
+      ctx.beginPath(); ctx.moveTo(-11.5, -14.5); ctx.lineTo(-13, -27.5); ctx.lineTo(-6, -20.5); ctx.lineTo(0, -29.5); ctx.lineTo(6, -20.5); ctx.lineTo(13, -27.5); ctx.lineTo(11.5, -14.5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffd257';
+      ctx.beginPath(); ctx.moveTo(-10, -15.5); ctx.lineTo(-11.2, -24.5); ctx.lineTo(-6, -19); ctx.lineTo(0, -26.5); ctx.lineTo(6, -19); ctx.lineTo(11.2, -24.5); ctx.lineTo(10, -15.5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#e8322e'; circ(ctx, 0, -18.5, 1.6);
+      ctx.restore();
+      // Jauge de vie du roi
+      const bw = Math.min(220, W - 140), bx = W / 2 - bw / 2;
+      ctx.fillStyle = OUT; rr(ctx, bx - 2, 62, bw + 4, 12, 6); ctx.fill();
+      ctx.fillStyle = '#3a0c12'; rr(ctx, bx, 64, bw, 8, 4); ctx.fill();
+      ctx.fillStyle = '#ff5a3d'; rr(ctx, bx, 64, Math.max(8, bw * clamp(b.hp / b.max, 0, 1)), 8, 4); ctx.fill();
+    }
     for (const e of v.list) {
       if (!e.alive) continue;
       const size = FOES[e.kind].size;
@@ -1338,8 +1586,8 @@
         circ(ctx, e.x, e.y, 27 * size);
       }
       ctx.save();
-      ctx.translate(e.x, e.y + oy + Math.sin(machine.t * 6 + e.ph) * (e.kind === 'fumee' ? 4 : 2));
-      ctx.rotate(Math.sin(machine.t * 5 + e.ph) * 0.12);
+      ctx.translate(e.x, e.y + oy + (e.dive ? 0 : Math.sin(machine.t * 6 + e.ph) * (e.kind === 'fumee' ? 4 : 2)));
+      ctx.rotate(e.dive && !e.dive.back ? machine.t * 9 : Math.sin(machine.t * 5 + e.ph) * 0.12);
       ctx.scale(size, size);
       if (e.kind === 'fumee') ctx.globalAlpha = 0.88;
       drawFoe(ctx, e.kind, { hp: e.hp, hit: e.hit, t: machine.t + e.ph });
@@ -1348,6 +1596,7 @@
 
     // Disparitions en cours
     for (const f of v.fx) {
+      if (f.t < 0) continue;
       const p = clamp(f.t / f.dur, 0, 1);
       ctx.save();
       ctx.translate(f.x, f.y);
@@ -1374,12 +1623,21 @@
         drawItem(ctx, f.item, { t: machine.t, seed: 0, face: th.faces });
       } else {
         ctx.globalAlpha = 1 - p;
-        ctx.fillStyle = f.kind === 'braise' ? '#ffd27a' : '#ffffff';
-        circ(ctx, 0, 0, 10 + p * 28);
+        ctx.fillStyle = f.big ? '#ffd257' : f.kind === 'braise' ? '#ffd27a' : '#ffffff';
+        circ(ctx, 0, 0, (f.big ? 20 : 10) + p * (f.big ? 56 : 28));
       }
       ctx.restore();
     }
 
+    for (const c of v.caps) {
+      ctx.save();
+      ctx.translate(c.x, c.y);
+      ctx.rotate(Math.sin(machine.t * 5 + c.x) * 0.25);
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.14 + 0.1 * Math.sin(machine.t * 8)) + ')';
+      circ(ctx, 0, 0, 22);
+      drawInvCapsule(c.kind);
+      ctx.restore();
+    }
     for (const b of v.bombs) {
       const r = b.fast ? 7 : 5.5;
       ctx.fillStyle = 'rgba(255,120,40,.3)'; circ(ctx, b.x, b.y, r + 5);
@@ -3604,13 +3862,13 @@
     setText('status', mode === 'chrono' ? '⏱ ' + Math.ceil(g.left) : mode === 'tuto' ? 'Tutoriel' : mode === 'empile' ? 'Lignes ' + g.emp.lines : '❤'.repeat(Math.max(0, g.lives)));
     setBar('comboBar', mult >= 5 ? 100 : Math.round((g.combo % COMBO_STEP) / COMBO_STEP * 100));
     setClass('comboWrap', 'max', mult >= 5);
-    const power = Math.max(g.giant, g.magnet, g.rapid || 0, g.fire || 0, mode === 'laby' ? labyPower().t : mode === 'rafle' ? rafPower().t : 0);
+    const power = Math.max(g.giant, g.magnet, mode === 'invasion' ? invPower().t : 0, g.fire || 0, mode === 'laby' ? labyPower().t : mode === 'rafle' ? rafPower().t : 0);
     setClass('powerWrap', 'hidden', power <= 0);
     setBar('powerBar', Math.round(power / 8 * 100));
     let pw = '';
     if (g.giant > 0) pw = 'Seau géant ' + Math.ceil(g.giant);
     else if (g.magnet > 0) pw = 'Aimant ' + Math.ceil(g.magnet);
-    else if (g.rapid > 0) pw = 'Tir rapide ' + Math.ceil(g.rapid);
+    else if (mode === 'invasion') pw = invPower().txt;
     else if (g.fire > 0) pw = 'Grain de feu ' + Math.ceil(g.fire);
     else if (mode === 'laby') pw = labyPower().txt;
     else if (mode === 'rafle') pw = rafPower().txt;
