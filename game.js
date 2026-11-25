@@ -38,6 +38,12 @@
     // Deux super-héros originaux (pas de personnages sous licence)
     { id: 'heros', name: 'Capitaine Pop', shirt: '#1f8f5f', skin: '#f2c49b', cape: '#ffcc00', pop: 700, candy: 60 },
     { id: 'masque', name: 'Éclair', shirt: '#4a34b0', skin: '#4a34b0', cape: '#ffe14d', pop: 800, candy: 80 },
+    { id: 'lapin', name: 'Carotte', shirt: '#ffb3c8', skin: '#fff8f0', pop: 120, candy: 0 },
+    { id: 'grenouille', name: 'Rainette', shirt: '#3f9e4f', skin: '#5cc16a', pop: 180, candy: 0 },
+    { id: 'ours', name: 'Nounours', shirt: '#7a4d24', skin: '#a9713f', pop: 220, candy: 10 },
+    { id: 'pingouin', name: 'Glaçon', shirt: '#2b3440', skin: '#2b3440', pop: 280, candy: 15 },
+    { id: 'pirate', name: 'Barbe-Rouge', shirt: '#2b2b33', skin: '#f2c49b', pop: 450, candy: 35 },
+    { id: 'astronaute', name: 'Cosmo', shirt: '#f4f6fa', skin: '#f4f6fa', pop: 650, candy: 70 },
   ];
   const FREE = ['leo', 'mia', 'chat'];
 
@@ -49,6 +55,11 @@
     { id: 'etoile', name: 'Étoilé', pop: 300, candy: 30 },
     { id: 'eclair', name: 'Orage', pop: 400, candy: 40 },
     { id: 'arc', name: 'Arc-en-ciel', pop: 0, candy: 120 },
+    { id: 'pois', name: 'À pois', pop: 100, candy: 0 },
+    { id: 'coeurs', name: 'Cœurs', pop: 0, candy: 30 },
+    { id: 'zebre', name: 'Zèbre', pop: 250, candy: 10 },
+    { id: 'bois', name: 'Tonneau', pop: 350, candy: 20 },
+    { id: 'galaxie', name: 'Galaxie', pop: 500, candy: 60 },
   ];
 
   const TYPES = {
@@ -58,6 +69,10 @@
     bonbon: { pts: 5, cur: 'candy', s: 1.3 },
     sucette: { pts: 10, cur: 'candy', s: 1.45 },
     brule: { pts: 0, s: 1.5 },
+    dore: { pts: 6, cur: 'pop', s: 1.5 },          // pop-corn doré : rare, il tombe vite
+    gel: { pts: 2, cur: 'pop', s: 1.35 },          // glaçon : ralentit tout ce qui tombe
+    coeur: { pts: 0, cur: null, s: 1.35 },         // Survie : rend une vie
+    sablier: { pts: 0, cur: null, s: 1.35 },       // Chrono : ajoute du temps
   };
 
   const THEMES = {
@@ -293,6 +308,7 @@
   let items = [];
   let parts = [];
   let texts = [];
+  let cfx = [];             // animations des objets attrapés ou ratés
   let decorT = 0;
   const machine = { x: 200, t: 0, ph: 0, shake: 0 };
   const player = { x: 200, tx: 200, lean: 0, bounce: 0 };
@@ -329,7 +345,7 @@
       got: { pop: 0, candy: 0 }, n: { sucette: 0, brule: 0 },
       giant: 0, magnet: 0, hurt: 0, miss: 0, level: 1,
       event: null, nextEvent: 11 + Math.random() * 6,
-      count: 3, lastTick: 11, banner: null, banked: false, recordShown: false, tuto: null, rapid: 0, invul: 0, fire: 0, benter: 0,
+      count: 3, lastTick: 11, banner: null, banked: false, recordShown: false, tuto: null, gel: 0, caughtGood: 0, missedGood: 0, lastCall: false, rapid: 0, invul: 0, fire: 0, benter: 0,
     };
     if (m === 'rafle') {
       g.raf = { list: [], fx: [], trail: [], last: null, waveT: 0.4, waves: 0, chain: 0, chainT: 0, streak: 0, joy: 0, missFlash: 0, frenzy: 0, frenzyT: 0, slow: 0 };
@@ -358,7 +374,7 @@
       buildBricks();
     }
     if (m === 'tuto') { g.tuto = { step: 0, n: 0, t: 0, sp: 0, moved: 0, lx: W / 2 }; g.count = 0.8; g.banked = true; }
-    items = []; parts = []; texts = [];
+    items = []; parts = []; texts = []; cfx = [];
     player.x = player.tx = W / 2;
     player.lean = 0; player.bounce = 0;
     state = 'count';
@@ -451,7 +467,9 @@
     $('#overLoot').textContent = '+' + g.got.pop + ' 🍿   +' + g.got.candy + ' 🍬';
     const extra = $('#overExtra');
     extra.textContent = '';
-    const lines = ['Niveau ' + g.level + ' · combo max ' + g.maxCombo].concat(out ? out.lines : []);
+    const lines = ['Niveau ' + g.level + ' · combo max ' + g.maxCombo];
+    if ((mode === 'chrono' || mode === 'survie') && g.caughtGood + g.missedGood > 0) lines.push('Précision : ' + Math.round(100 * g.caughtGood / (g.caughtGood + g.missedGood)) + ' %');
+    if (out) lines.push(...out.lines);
     const unlock = nextUnlockLine();
     if (unlock) lines.push(unlock);
     if (!save.player.name) lines.push('Choisis un pseudo dans Classement pour comparer ton score');
@@ -499,6 +517,16 @@
     if (r < burnt) return 'brule';
     const q = (r - burnt) / (1 - burnt);
     if (q < 0.03) return 'arc';
+    if (mode === 'chrono' || mode === 'survie') {
+      // Objets propres aux deux modes classiques
+      if (q < 0.04) return 'gel';
+      if (q < 0.045) return mode === 'chrono' ? 'sablier' : g.lives < 3 ? 'coeur' : 'pop';
+      if (q < 0.062) return 'dore';
+      if (q < 0.1) return 'sucette';
+      if (q < 0.22) return 'bonbon';
+      if (q < 0.39) return 'caramel';
+      return 'pop';
+    }
     if (q < 0.08) return 'sucette';
     if (q < 0.21) return 'bonbon';
     if (q < 0.38) return 'caramel';
@@ -520,6 +548,17 @@
       seed: Math.random() * 360,
       free: evOn('pluie'),
     });
+    // Comportements particuliers, dans les deux modes classiques seulement
+    if (g && inGame() && (mode === 'chrono' || mode === 'survie')) {
+      const it = items[items.length - 1];
+      const r = Math.random();
+      if (type === 'coeur' || type === 'sablier' || type === 'gel') it.free = true;          // les rater ne coûte rien
+      if (type === 'sucette' && r < 0.25) it.beh = 'rebond';                                  // rebondit une fois au sol : seconde chance
+      else if (type === 'bonbon' && r < 0.2) it.beh = 'flotte';                               // descend en parachute
+      else if (type === 'pop' && r < 0.04) it.beh = 'grappe';                                 // grappe qui se sépare en trois
+      else if (type === 'brule' && g.level >= 2 && r < 0.25) it.beh = 'zigzag';               // grain brûlé qui zigzague
+      else if (type === 'dore') it.vy += 140;
+    }
     machine.shake = 0.12;
     if (!quiet) popSound(0.09);
   }
@@ -583,6 +622,21 @@
       return;
     }
     const T = TYPES[it.type];
+    if (it.type === 'coeur' || it.type === 'sablier') {
+      // Objets sans points : une vie en Survie, du temps en Chrono
+      g.combo++;
+      g.miss = 0;
+      g.maxCombo = Math.max(g.maxCombo, g.combo);
+      g.caughtGood++;
+      player.bounce = 0.25;
+      if (it.type === 'coeur') { g.lives = Math.min(3, g.lives + 1); banner('+1 vie !', '#ff8fa8'); }
+      else { g.left += 2; g.lastCall = g.left <= 10; banner('+2 secondes !', '#9fe8ff'); }
+      pushCfx(it, it.type);
+      burst(x, y, it.type === 'coeur' ? '#ff8fa8' : '#9fe8ff', 10, true);
+      jingle([784, 1047, 1319], 70);
+      buzz(30);
+      return;
+    }
     const multBefore = Math.min(5, 1 + Math.floor(g.combo / COMBO_STEP));
     g.combo++;
     g.miss = 0;
@@ -593,11 +647,17 @@
     g.got[T.cur]++;
     if (it.type === 'sucette') g.n.sucette++;
     player.bounce = 0.25;
+    g.caughtGood++;
+    // L'objet disparaît d'une des façons prévues pour sa sorte
+    const ways = CATCH_WAYS[it.type] || ['plonge'];
+    pushCfx(it, ways[Math.floor(Math.random() * ways.length)]);
+    if (Math.abs(it.x - player.x) < 5 && (mode === 'chrono' || mode === 'survie')) floatText('Pile !', x, y - 40, '#9fe8ff');
     const sweet = T.cur === 'candy';
     const col = sweet ? '#ffb3da' : '#fff4d6';
     floatText('+' + pts, x, y - 14, col);
     burst(x, y, col, sweet ? 9 : 4, sweet);
     ring(x, y, col);
+    if (it.type === 'gel') { g.gel = 3; banner('Ralenti !', '#9fe8ff'); jingle([784, 659, 523], 80); }
     if (it.type === 'arc') {
       if (mode === 'brique') brickPower();
       else if (Math.random() < 0.5) { g.giant = 8; banner('Seau géant !', '#9fe8ff'); }
@@ -624,6 +684,79 @@
       g.recordShown = true;
       banner('Nouveau record !', '#ffe27a');
       jingle([784, 988, 1175, 1568], 90);
+    }
+  }
+
+  // ---------- Disparition des objets attrapés (ou ratés) ----------
+  // way : plonge, rebondit, eclate, evapore, etoile, coeur, sablier, ecrase
+  const CATCH_WAYS = {
+    pop: ['plonge', 'plonge', 'rebondit', 'eclate'], caramel: ['plonge', 'rebondit', 'evapore'],
+    bonbon: ['etoile', 'plonge', 'rebondit'], sucette: ['etoile'], dore: ['eclate'], arc: ['eclate'], gel: ['evapore'],
+  };
+  function pushCfx(it, way) {
+    const dur = { plonge: 0.24, rebondit: 0.45, eclate: 0.32, evapore: 0.6, etoile: 0.65, coeur: 0.7, sablier: 0.7, ecrase: 0.45 }[way] || 0.3;
+    cfx.push({ way, type: it.type, seed: it.seed, rot: it.rot, s: TYPES[it.type].s, x: it.x, y: it.y, dx: it.x - player.x, t: 0, dur });
+  }
+
+  function drawCfx() {
+    const ry = rimY();
+    for (const f of cfx) {
+      const p = clamp(f.t / f.dur, 0, 1);
+      const item = () => drawItem(ctx, f.type, { t: machine.t, seed: f.seed, face: th.faces });
+      ctx.save();
+      if (f.way === 'plonge') {
+        // Glisse dans le seau en rétrécissant
+        ctx.translate(player.x + f.dx, ry + p * 20);
+        ctx.rotate(f.rot + p * 3);
+        ctx.scale(f.s * (1 - p), f.s * (1 - p));
+        item();
+      } else if (f.way === 'rebondit') {
+        // Fait un petit bond sur le bord avant de tomber dedans
+        const k = Math.min(1, p / 0.8);
+        ctx.translate(player.x + f.dx * (1 - k), ry - Math.sin(k * Math.PI) * 30 + k * 10);
+        ctx.rotate(f.rot + p * 6);
+        const sc = f.s * (p > 0.8 ? (1 - p) / 0.2 : 1);
+        ctx.scale(sc, sc);
+        item();
+      } else if (f.way === 'evapore') {
+        // Blanchit, monte et s'efface
+        ctx.translate(player.x + f.dx, ry - 8 - p * 44);
+        ctx.globalAlpha = 1 - p;
+        ctx.rotate(f.rot);
+        ctx.scale(f.s * (1 + p * 0.5), f.s * (1 + p * 0.5));
+        item();
+        ctx.fillStyle = 'rgba(255,255,255,' + (0.3 + p * 0.6) + ')';
+        circ(ctx, 0, -1, 14);
+        circ(ctx, -9 + Math.sin(f.t * 9) * 4, -18 - p * 12, 4 + p * 4);
+        circ(ctx, 8 + Math.cos(f.t * 8) * 4, -22 - p * 16, 3 + p * 4);
+      } else if (f.way === 'etoile') {
+        // Devient une étoile qui file vers le score
+        const m = Math.min(1, p / 0.4), fly = Math.max(0, (p - 0.4) / 0.6), e = fly * fly;
+        const sx = player.x + f.dx, sy = ry - 10;
+        ctx.translate(sx + (60 - sx) * e, sy + (38 - sy) * e);
+        if (m < 1) { ctx.save(); ctx.rotate(f.rot + m * 8); ctx.scale(f.s * (1 - m), f.s * (1 - m)); item(); ctx.restore(); }
+        ctx.rotate(p * 5);
+        ctx.fillStyle = '#ffe27a'; star(ctx, 0, 0, 6 + m * 12 * (1 - fly * 0.5));
+        ctx.fillStyle = '#fff'; star(ctx, 0, 0, 3 + m * 5 * (1 - fly * 0.5));
+      } else if (f.way === 'coeur' || f.way === 'sablier') {
+        // File vers les vies ou le chrono, en haut à droite
+        const e = p * p, sx = player.x + f.dx, sy = ry - 10;
+        ctx.translate(sx + (W - 96 - sx) * e, sy + (38 - sy) * e - Math.sin(p * Math.PI) * 40);
+        ctx.scale(f.s * (1 - p * 0.4), f.s * (1 - p * 0.4));
+        item();
+      } else if (f.way === 'ecrase') {
+        // Raté : il s'écrase au sol
+        ctx.translate(f.x, f.y);
+        ctx.globalAlpha = 1 - p;
+        ctx.scale(f.s * (1 + p * 0.5), f.s * (1 - p * 0.65) * 0.7);
+        item();
+      } else {
+        ctx.translate(player.x + f.dx, ry - 6);
+        ctx.globalAlpha = 1 - p;
+        ctx.fillStyle = f.type === 'dore' ? '#ffd257' : f.type === 'arc' ? '#9fe8ff' : '#ffffff';
+        circ(ctx, 0, 0, 10 + p * (f.type === 'dore' ? 44 : 28));
+      }
+      ctx.restore();
     }
   }
 
@@ -3295,11 +3428,13 @@
       if (mode === 'chrono') {
         g.left -= dt;
         const sec = Math.ceil(g.left);
+        if (sec <= 10 && !g.lastCall) { g.lastCall = true; banner('Dernières secondes !', '#ff9d6b'); }
         if (sec <= 10 && sec > 0 && sec !== g.lastTick) { g.lastTick = sec; tone(sec <= 3 ? 1250 : 900, 0.06, 'square', 0.06); }
         if (g.left <= 0) { g.left = 0; endGame(); return; }
       }
       g.giant = Math.max(0, g.giant - dt);
       g.magnet = Math.max(0, g.magnet - dt);
+      g.gel = Math.max(0, g.gel - dt);
       g.hurt = Math.max(0, g.hurt - dt);
 
       if (mode === 'tuto') tutoUpdate(dt);
@@ -3338,16 +3473,28 @@
     const gy = groundY();
     const ry = rimY();
     const bw = bucketHalf() * PS;
+    const classic = !!g && (mode === 'chrono' || mode === 'survie');
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
       const rad = 13 * TYPES[it.type].s;
-      it.vy += grav * dt;
+      const idt = dt * (playing && g.gel > 0 ? 0.72 : 1);      // le glaçon ralentit tout ce qui tombe
+      it.vy += grav * idt;
+      if (it.beh === 'flotte') { it.vy = Math.min(it.vy, 150); it.x += Math.sin(machine.t * 3 + it.seed) * 38 * idt; }
+      else if (it.beh === 'zigzag') it.vx += Math.cos(machine.t * 6 + it.seed) * 520 * idt;
+      else if (it.beh === 'grappe' && it.vy > 0 && it.y > MY + 112 * MS + (ry - MY - 112 * MS) * 0.42) {
+        // La grappe se sépare en trois pop-corn
+        items.splice(i, 1);
+        for (const k of [-1, 0, 1]) items.push({ type: 'pop', x: it.x, y: it.y, vx: it.vx * 0.5 + k * 95, vy: it.vy * 0.5 - 70, rot: Math.random() * TAU, vr: (Math.random() - 0.5) * 7, seed: Math.random() * 360, free: it.free });
+        burst(it.x, it.y, '#fff4d6', 6);
+        popSound(0.1);
+        continue;
+      }
       if (playing && g.magnet > 0 && it.type !== 'brule' && it.y > ry - 260 && it.y < ry) {
         it.x += (player.x - it.x) * Math.min(1, dt * 5);
       }
-      it.x += it.vx * dt;
-      it.y += it.vy * dt;
-      it.rot += it.vr * dt;
+      it.x += it.vx * idt;
+      it.y += it.vy * idt;
+      it.rot += it.vr * idt;
       if (it.x < WALL + rad) { it.x = WALL + rad; it.vx = Math.abs(it.vx) * 0.7; }
       if (it.x > W - WALL - rad) { it.x = W - WALL - rad; it.vx = -Math.abs(it.vx) * 0.7; }
 
@@ -3357,8 +3504,22 @@
         if (state !== 'play') return;
         continue;
       }
+      // Passé tout près du seau sans y tomber
+      if (classic && playing && !it.near && it.type !== 'brule' && it.vy > 0 && it.y > ry + 26 && it.y < ry + 70 && Math.abs(it.x - player.x) < bw + 20) {
+        it.near = true;
+        floatText('Presque !', it.x, ry - 4, '#ffb37a');
+      }
       if (it.y > gy - rad * 0.5) {
+        if (it.beh === 'rebond' && !it.bounced) {
+          it.bounced = true;
+          it.y = gy - rad * 0.5 - 1;
+          it.vy = -Math.abs(it.vy) * 0.6;
+          tone(300, 0.05, 'triangle', 0.06);
+          continue;
+        }
         items.splice(i, 1);
+        if (it.type !== 'brule' && inGame()) pushCfx({ type: it.type, seed: it.seed, rot: 0, x: it.x, y: gy - 6 }, 'ecrase');
+        if (classic && playing && it.type !== 'brule' && !it.free) g.missedGood++;
         burst(it.x, gy - 4, it.type === 'brule' ? '#4a3a35' : '#fff1c9', 3);
         if (playing && mode === 'tuto') tutoFloor(it);
         if (playing && it.type !== 'brule' && !it.free) {
@@ -3376,6 +3537,10 @@
       }
     }
 
+    for (let i = cfx.length - 1; i >= 0; i--) {
+      cfx[i].t += dt;
+      if (cfx[i].t >= cfx[i].dur) cfx.splice(i, 1);
+    }
     for (let i = parts.length - 1; i >= 0; i--) {
       const p = parts[i];
       p.life -= dt;
@@ -3778,12 +3943,34 @@
       ctx.translate((Math.random() - 0.5) * 24 * shakeT, (Math.random() - 0.5) * 24 * shakeT);
     }
     drawBg();
+    if (g && inGame() && (mode === 'chrono' || mode === 'survie' || mode === 'tuto')) {
+      // Ombre au sol sous chaque objet : elle grossit à mesure qu'il approche, pour juger où il va tomber
+      const gy0 = groundY();
+      for (const it of items) {
+        const k = clamp((it.y - 150) / (gy0 - 150), 0, 1);
+        ctx.fillStyle = 'rgba(0,0,0,' + (0.07 + 0.2 * k) + ')';
+        oval(ctx, it.x, gy0 + 3, 7 + 13 * k, 2 + 3 * k);
+      }
+    }
     for (const it of items) {
-      const s = TYPES[it.type].s;
+      const s = TYPES[it.type].s * (it.beh === 'grappe' ? 1.2 : 1);
       ctx.save();
       ctx.translate(it.x, it.y);
-      ctx.rotate(th.faces ? Math.sin(it.rot) * 0.35 : it.rot);
+      if (it.beh === 'flotte') {
+        // Petit parachute
+        ctx.rotate(Math.sin(machine.t * 3 + it.seed) * 0.14);
+        ctx.strokeStyle = 'rgba(255,255,255,.7)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.moveTo(-17, -32); ctx.lineTo(-7, -9); ctx.moveTo(17, -32); ctx.lineTo(7, -9); ctx.moveTo(0, -32); ctx.lineTo(0, -12); ctx.stroke();
+        ctx.fillStyle = OUT; ctx.beginPath(); ctx.arc(0, -32, 20.5, Math.PI, 0); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = th.bucket; ctx.beginPath(); ctx.arc(0, -32, 19, Math.PI, 0); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = th.stripe;
+        for (const a of [0, 2]) { ctx.beginPath(); ctx.moveTo(0, -32); ctx.arc(0, -32, 19, Math.PI * (1 + a / 4 + 0.125), Math.PI * (1 + a / 4 + 0.375)); ctx.closePath(); ctx.fill(); }
+      } else ctx.rotate(th.faces ? Math.sin(it.rot) * 0.35 : it.rot);
       ctx.scale(s, s);
+      if (it.beh === 'grappe') {
+        for (const [ox, oy] of [[-10, 6], [10, 6]]) { ctx.save(); ctx.translate(ox, oy); ctx.scale(0.8, 0.8); drawItem(ctx, it.type, { t: machine.t, seed: it.seed, face: false }); ctx.restore(); }
+      }
       drawItem(ctx, it.type, { t: machine.t, seed: it.seed, face: th.faces });
       ctx.restore();
     }
@@ -3803,6 +3990,18 @@
       }
     }
     if (bricksOn) drawBall();
+    if (g && inGame()) {
+      drawCfx();
+      if (g.gel > 0 && state === 'play') { ctx.fillStyle = 'rgba(150,215,255,.10)'; ctx.fillRect(0, 0, W, groundY()); }
+      // Survie : dernière vie, les bords de l'écran rougissent
+      if (mode === 'survie' && g.lives === 1 && state === 'play') {
+        const v = ctx.createRadialGradient(W / 2, H * 0.5, H * 0.3, W / 2, H * 0.5, H * 0.75);
+        v.addColorStop(0, 'rgba(255,40,40,0)');
+        v.addColorStop(1, 'rgba(255,40,40,' + (0.16 + 0.08 * Math.sin(machine.t * 5)) + ')');
+        ctx.fillStyle = v;
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
 
     for (const p of parts) {
       const k = clamp(p.life / p.max, 0, 1);
@@ -3860,14 +4059,16 @@
     setText('combo', mult > 1 ? 'x' + mult : '');
     setText('level', (mode === 'invasion' ? 'Vague ' : 'Niv. ') + g.level);
     setText('status', mode === 'chrono' ? '⏱ ' + Math.ceil(g.left) : mode === 'tuto' ? 'Tutoriel' : mode === 'empile' ? 'Lignes ' + g.emp.lines : '❤'.repeat(Math.max(0, g.lives)));
+    setClass('status', 'urgent', mode === 'chrono' && g.left <= 10);
     setBar('comboBar', mult >= 5 ? 100 : Math.round((g.combo % COMBO_STEP) / COMBO_STEP * 100));
     setClass('comboWrap', 'max', mult >= 5);
-    const power = Math.max(g.giant, g.magnet, mode === 'invasion' ? invPower().t : 0, g.fire || 0, mode === 'laby' ? labyPower().t : mode === 'rafle' ? rafPower().t : 0);
+    const power = Math.max(g.giant, g.magnet, (g.gel || 0) * 2.67, mode === 'invasion' ? invPower().t : 0, g.fire || 0, mode === 'laby' ? labyPower().t : mode === 'rafle' ? rafPower().t : 0);
     setClass('powerWrap', 'hidden', power <= 0);
     setBar('powerBar', Math.round(power / 8 * 100));
     let pw = '';
     if (g.giant > 0) pw = 'Seau géant ' + Math.ceil(g.giant);
     else if (g.magnet > 0) pw = 'Aimant ' + Math.ceil(g.magnet);
+    else if (g.gel > 0) pw = 'Ralenti ' + Math.ceil(g.gel);
     else if (mode === 'invasion') pw = invPower().txt;
     else if (g.fire > 0) pw = 'Grain de feu ' + Math.ceil(g.fire);
     else if (mode === 'laby') pw = labyPower().txt;
@@ -4109,6 +4310,8 @@
       ['bonbon', 'Bonbon : +5'],
       ['sucette', 'Sucette : +10'],
       ['arc', 'Arc-en-ciel : seau géant ou aimant'],
+      ['dore', 'Pop-corn doré : +6, il tombe vite'],
+      ['gel', 'Glaçon : ralentit tout'],
       ['brule', 'Grain brûlé : à éviter !'],
     ];
     for (const [type, text] of rows) {
